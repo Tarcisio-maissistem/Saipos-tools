@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Saipos Tools",
+  "version": "3.16.0",
+  "description": "Extrai itens por garçom, calcula comissões e gera relatório.",
+  "permissions": ["activeTab", "scripting", "downloads", "storage"],
+  "host_permissions": ["https://conta.saipos.com/*"],
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://conta.saipos.com/*"],
+      "js": ["src/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": { "service_worker": "src/background.js" },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/report.js"],
+      "matches": ["https://conta.saipos.com/*"]
+    }
+  ]
+}

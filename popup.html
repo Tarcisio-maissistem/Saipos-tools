@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Saipos Tools</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0d13;--s1:#131720;--s2:#1c2130;--s3:#242b3d;
+  --acc:#00e5a0;--acc2:#f97316;--warn:#fbbf24;
+  --txt:#dde1eb;--muted:#5a6380;--bord:#262d42;
+  --r:8px
+}
+body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
+     font-family:'IBM Plex Sans',sans-serif;font-size:12px}
+
+/* ─── Header ─── */
+.hdr{padding:14px 16px 10px;display:flex;align-items:center;gap:12px;
+     background:linear-gradient(135deg,var(--bg),var(--s1));
+     border-bottom:1px solid var(--bord)}
+.logo{width:38px;height:38px;background:var(--acc);border-radius:9px;display:flex;
+      align-items:center;justify-content:center;
+      font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px;
+      color:#0b0d13;flex-shrink:0}
+.hdr-text h1{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;color:var(--acc)}
+.hdr-text p{color:var(--muted);font-size:10px;margin-top:1px}
+
+/* ─── URL check ─── */
+.url-warn{background:#2d1f00;border:1px solid #f97316;border-radius:var(--r);
+          padding:8px 12px;margin:10px 12px;font-size:11px;color:#fdba74;display:none}
+.url-warn.show{display:block}
+
+/* ─── Status ─── */
+.status-row{background:var(--s1);border-bottom:1px solid var(--bord);
+            padding:7px 14px;display:flex;align-items:center;justify-content:space-between}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);
+     display:inline-block;margin-right:7px;transition:background .3s}
+.dot.run{background:var(--acc);animation:pulse 1s infinite}
+.dot.done{background:var(--acc)}
+.dot.err{background:var(--acc2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+#statusLabel{font-size:10px;color:var(--muted)}
+#pctBadge{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--acc)}
+
+/* ─── Progress ─── */
+.prog-wrap{padding:8px 14px;background:var(--s1);border-bottom:1px solid var(--bord)}
+.prog-track{height:3px;background:var(--bord);border-radius:3px;overflow:hidden;margin-bottom:4px}
+.prog-fill{height:100%;background:var(--acc);border-radius:3px;transition:width .4s ease;width:0}
+#progLabel{font-size:10px;color:var(--muted);text-align:right}
+
+/* ─── Botões ─── */
+.btns{display:flex;gap:7px;padding:10px 14px;background:var(--bg);border-bottom:1px solid var(--bord)}
+.btn{flex:1;padding:8px 6px;border:none;border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;
+     font-size:11px;font-weight:700;cursor:pointer;transition:.15s;letter-spacing:.3px}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
+.b-start{background:var(--acc);color:#0b0d13}
+.b-start:hover{background:#00ffb8}
+.b-pause{background:var(--warn);color:#0b0d13}
+.b-pause:hover{background:#fde68a}
+.b-stop{background:var(--s2);color:var(--acc2);border:1px solid var(--acc2)}
+.b-stop:hover{background:var(--acc2);color:#fff}
+.b-report{background:var(--s2);color:var(--acc);border:1px solid var(--acc)}
+.b-report:hover{background:var(--acc);color:#0b0d13}
+
+/* ─── Tabs ─── */
+.tabs{display:flex;border-bottom:1px solid var(--bord);background:var(--s1)}
+.tab{flex:1;padding:8px 4px;text-align:center;font-size:10px;text-transform:uppercase;
+     letter-spacing:.5px;color:var(--muted);cursor:pointer;
+     border-bottom:2px solid transparent;transition:.15s}
+.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
+
+/* ─── Painéis ─── */
+.panel{display:none;height:310px;overflow-y:auto}
+.panel.active{display:block}
+.panel::-webkit-scrollbar{width:3px}
+.panel::-webkit-scrollbar-track{background:var(--bg)}
+.panel::-webkit-scrollbar-thumb{background:var(--bord);border-radius:2px}
+
+/* ─── Log ─── */
+.log-line{padding:4px 14px;border-bottom:1px solid var(--bord);font-size:10px;
+          display:flex;gap:8px;font-family:'IBM Plex Mono',monospace}
+.ll-time{color:var(--muted);flex-shrink:0}
+.ll-msg{color:var(--txt);word-break:break-word}
+.log-line.error .ll-msg{color:var(--acc2)}
+.log-line.warn  .ll-msg{color:var(--warn)}
+
+/* ─── Resumo ─── */
+.gc-row{padding:10px 14px;border-bottom:1px solid var(--bord)}
+.gc-name{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;
+         color:var(--acc);display:flex;justify-content:space-between;margin-bottom:4px}
+.gc-stats{display:flex;gap:14px;flex-wrap:wrap}
+.gc-stat span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.gc-stat b{color:var(--txt);font-size:11px;font-family:'IBM Plex Mono',monospace}
+
+/* ─── Tabela alertas ─── */
+.alert-tbl{width:100%;border-collapse:collapse}
+.alert-tbl th{background:var(--s2);padding:5px 10px;font-size:9px;text-transform:uppercase;
+              letter-spacing:.4px;color:var(--muted);text-align:left}
+.alert-tbl td{padding:5px 10px;border-bottom:1px solid var(--bord);font-size:10px}
+.alert-tbl tr:hover td{background:var(--s1)}
+.sec-label{padding:7px 14px 3px;font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+
+/* ─── Badges ─── */
+.badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700}
+.b-ok{background:rgba(0,229,160,.15);color:var(--acc)}
+.b-low{background:rgba(251,191,36,.15);color:var(--warn)}
+.b-zero{background:rgba(249,115,22,.15);color:var(--acc2)}
+.b-cancel{background:rgba(90,99,128,.15);color:var(--muted)}
+
+/* ─── Empty ─── */
+.empty{padding:50px 14px;text-align:center;color:var(--muted);line-height:2}
+.empty big{font-size:28px;display:block;margin-bottom:6px}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">O</div>
+  <div class="hdr-text">
+    <h1>Saipos Tools</h1>
+    <p>Robô extrator · conta.saipos.com · v3.16.0</p>
+  </div>
+</div>
+
+<div class="url-warn" id="urlWarn">
+  ⚠️ Acesse <b>conta.saipos.com/#/app/report/sales-by-period</b>, aplique o filtro de datas e clique em INICIAR.
+</div>
+
+<div class="status-row">
+  <div><span class="dot" id="dot"></span><span id="statusLabel">Aguardando...</span></div>
+  <span id="pctBadge"></span>
+</div>
+
+<div class="prog-wrap">
+  <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+  <div id="progLabel">0 / 0 vendas</div>
+</div>
+
+<div class="btns">
+  <button class="btn b-start"  id="bStart">▶ INICIAR</button>
+  <button class="btn b-pause"  id="bPause" disabled>⏸ PAUSAR</button>
+  <button class="btn b-stop"   id="bStop"  disabled>■ PARAR</button>
+  <button class="btn b-report" id="bReport" disabled>📄 RELATÓRIO</button>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="log">LOG</div>
+  <div class="tab" data-tab="resumo">GARÇONS</div>
+  <div class="tab" data-tab="alertas">ALERTAS</div>
+</div>
+
+<div class="panel active" id="panel-log">
+  <div class="empty"><big>🤖</big>Clique em <b>INICIAR</b> para o robô começar.<br>
+  Certifique-se de ter o filtro de datas aplicado na página.</div>
+</div>
+
+<div class="panel" id="panel-resumo">
+  <div class="empty"><big>👤</big>Nenhum dado ainda.</div>
+</div>
+
+<div class="panel" id="panel-alertas">
+  <div class="empty"><big>⚠️</big>Nenhum alerta ainda.</div>
+</div>
+
+<script src="src/popup.js"></script>
+</body>
+</html>

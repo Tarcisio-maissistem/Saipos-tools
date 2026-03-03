@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Relatório de Comissões – Saipos Tools</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;font-size:13px;line-height:1.5}
+.page{max-width:1200px;margin:0 auto;padding:28px 16px 80px}
+
+/* ─── Cabeçalho ─── */
+.header{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.logo{width:44px;height:44px;background:#0f1117;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#00e5a0;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:20px;flex-shrink:0}
+.header h1{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;color:#0f1117}
+.header .store-name{font-size:14px;color:#00c27c;font-weight:600;margin-top:2px}
+.header p{color:#6b7280;font-size:11px}
+
+/* ─── Cards resumo ─── */
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}
+.card{background:#fff;border-radius:10px;padding:14px 18px;flex:1;min-width:140px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card .cl{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.card .cv{font-size:18px;font-weight:700;margin-top:3px;font-family:'IBM Plex Mono',monospace}
+.card.ok  .cv{color:#15803d}
+.card.warn .cv{color:#b45309}
+.card.bad  .cv{color:#b91c1c}
+
+/* ─── Barra de ações ─── */
+.toolbar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:none;border-radius:7px;
+     font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+.btn-dark{background:#0f1117;color:#fff}.btn-dark:hover{background:#374151}
+.btn-green{background:#00c27c;color:#fff}.btn-green:hover{background:#00a86b}
+.btn-blue{background:#2563eb;color:#fff}.btn-blue:hover{background:#1d4ed8}
+.btn-outline{background:#fff;color:#374151;border:1px solid #d1d5db}.btn-outline:hover{background:#f9fafb}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.btn:active{transform:scale(.97)}
+
+/* ─── Bloco de data ─── */
+.date-block{margin-bottom:24px}
+.date-header{background:#0f1117;color:#fff;padding:10px 16px;border-radius:10px 10px 0 0;
+             display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.date-header .dh-title{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700}
+.date-header .dh-info{display:flex;gap:16px;font-size:11px;opacity:.8;flex-wrap:wrap}
+.date-content{background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;overflow:hidden}
+
+/* ─── Venda (mesa/comanda) ─── */
+.venda-wrap{border-bottom:2px solid #f1f5f9}
+.venda-wrap:last-child{border-bottom:none}
+.venda-head{background:#f8fafc;padding:8px 14px;display:flex;gap:14px;align-items:center;
+            flex-wrap:wrap;border-bottom:1px solid #e5e7eb}
+.venda-head .tag{font-size:11px;color:#6b7280}
+.venda-head .tag b{color:#1a1d27;font-size:12px}
+
+/* ─── Badges ─── */
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;letter-spacing:.3px}
+.c-ok     {background:#dcfce7;color:#15803d}
+.c-low    {background:#fef9c3;color:#92400e}
+.c-zero   {background:#fee2e2;color:#b91c1c}
+.c-cancel {background:#f3f4f6;color:#6b7280}
+.c-item-cancel{background:#fee2e2;color:#991b1b;font-size:9px;padding:1px 5px}
+
+/* ─── Tabela de itens ─── */
+.items-table{width:100%;border-collapse:collapse}
+.items-table thead th{background:#f1f5f9;padding:6px 12px;text-align:left;font-size:10px;
+   text-transform:uppercase;letter-spacing:.4px;color:#64748b;font-weight:600;white-space:nowrap}
+.items-table tbody td{padding:6px 12px;border-bottom:1px solid #f1f5f9;font-size:12px;vertical-align:middle}
+.items-table tbody tr:last-child td{border-bottom:none}
+.items-table tbody tr:hover td{background:#fafafa}
+.items-table .tr-cancel td{opacity:.45;text-decoration:line-through}
+.garcom-chip{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;
+             font-weight:600;background:#eff6ff;color:#1d4ed8}
+.tr{text-align:right}.tc{text-align:center}
+
+/* ─── Subtotal garçom na venda ─── */
+.venda-subtotal{background:#f8fafc;padding:8px 14px;border-top:1px dashed #e5e7eb;
+                display:flex;gap:14px;flex-wrap:wrap}
+.vs-item .vs-name{font-weight:700;color:#1d4ed8;font-size:11px}
+.vs-item .vs-val{color:#6b7280;font-size:10px}
+
+/* ─── Resumo garçom no dia ─── */
+.day-summary{background:#f0fdf4;border-top:2px solid #bbf7d0;padding:10px 14px;
+             display:flex;gap:18px;flex-wrap:wrap}
+.ds-item .ds-name{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;color:#15803d}
+.ds-item .ds-val{color:#6b7280;font-size:10px}
+
+/* ─── Resumo global ─── */
+.global-section{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:28px;overflow:hidden}
+.global-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px 18px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
+.global-title{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;color:#0f1117;margin:0}
+.filter-wrap{display:flex;align-items:center;gap:10px}
+.filter-wrap label{font-size:12px;color:#6b7280;font-weight:500}
+.select-garcom{padding:8px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;font-weight:600;
+   background:#fff;color:#0f1117;cursor:pointer;min-width:200px;font-family:'IBM Plex Sans',sans-serif}
+.select-garcom:focus{outline:none;border-color:#00c27c;box-shadow:0 0 0 3px rgba(0,194,124,.15)}
+.select-garcom:hover{border-color:#9ca3af}
+.global-table{width:100%;border-collapse:collapse;background:#fff}
+.global-table thead th{background:#0f1117;color:#fff;padding:10px 14px;font-size:11px;
+   text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+.global-table tbody td{padding:9px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}
+.global-table tbody tr:last-child td{border-bottom:none}
+.global-table tbody tr:hover td{background:#fafafa}
+.btn-copy-garcom{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:none;border-radius:5px;
+   font-size:11px;font-weight:600;cursor:pointer;background:#eff6ff;color:#1d4ed8;transition:.15s;margin-left:8px}
+.btn-copy-garcom:hover{background:#dbeafe}
+.btn-copy-garcom:active{transform:scale(.95)}
+.btn-copy-garcom.copied{background:#dcfce7;color:#15803d}
+
+/* ─── Alertas ─── */
+.alertas-wrap{display:none;margin-top:28px}
+.alerta-section{margin-bottom:18px;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.alerta-header{padding:10px 16px;font-weight:700;font-size:12px}
+.ah-zero{background:#fee2e2;color:#991b1b}
+.ah-low{background:#fef9c3;color:#92400e}
+.ah-cancel{background:#f3f4f6;color:#374151}
+.alerta-section .items-table{background:#fff}
+
+/* ─── Relatório Individual do Garçom ─── */
+.individual-garcom-section{margin-top:20px}
+.individual-header{background:linear-gradient(135deg,#1e40af 0%,#3b82f6 100%);color:#fff;padding:20px 24px;border-radius:12px;margin-bottom:20px}
+.ih-title{font-size:20px;font-weight:700;margin-bottom:4px}
+.ih-title b{color:#fbbf24}
+.ih-period{font-size:12px;opacity:.85}
+
+.individual-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px}
+.ind-card{background:#fff;border-radius:10px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,.08);text-align:center}
+.ind-card.highlight{background:linear-gradient(135deg,#dcfce7 0%,#bbf7d0 100%);border:2px solid #22c55e}
+.ic-label{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.ic-value{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:700;color:#0f1117}
+.ind-card.highlight .ic-value{color:#15803d}
+
+.ind-day-block{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:20px;overflow:hidden;page-break-inside:avoid}
+.ind-day-header{background:linear-gradient(135deg,#0f1117 0%,#1e293b 100%);color:#fff;padding:12px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;cursor:pointer;transition:background .15s}
+.ind-day-header:hover{background:linear-gradient(135deg,#1e293b 0%,#334155 100%)}
+.ind-day-date{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700}
+.ind-day-stats{font-size:12px;opacity:.85;flex:1}
+.ind-toggle-icon{font-size:12px;opacity:.7;margin-left:auto;transition:transform .2s}
+
+.ind-day-content{display:none;overflow:hidden}
+.ind-day-content.expanded{display:block}
+
+.ind-items-table{width:100%;border-collapse:collapse}
+.ind-items-table thead th{background:#f8fafc;padding:8px 14px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#64748b;font-weight:600;text-align:left}
+.ind-items-table thead th.tr{text-align:right}
+.ind-items-table tbody td{padding:8px 14px;border-bottom:1px solid #f1f5f9;font-size:12px}
+.ind-items-table tbody tr:hover td{background:#fafafa}
+.ind-items-table tfoot td{background:#f0fdf4;padding:10px 14px;border-top:2px solid #bbf7d0}
+.ind-day-total td{font-weight:700}
+
+.ind-grand-total{background:linear-gradient(135deg,#15803d 0%,#22c55e 100%);color:#fff;border-radius:12px;padding:24px;margin-top:28px;text-align:center}
+.igt-title{font-size:18px;font-weight:700;margin-bottom:4px}
+.igt-period{font-size:12px;opacity:.85;margin-bottom:16px}
+.igt-summary{display:flex;justify-content:center;gap:32px;flex-wrap:wrap}
+.igt-item{display:flex;flex-direction:column;align-items:center;gap:4px}
+.igt-item span:first-child{font-size:11px;opacity:.85;text-transform:uppercase}
+.igt-item span:last-child{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700}
+.igt-item.highlight span:last-child{font-size:28px;color:#fbbf24}
+
+/* ─── Resumo Diário ─── */
+.daily-summary{display:none;margin-top:28px}
+.daily-summary.active{display:block}
+.daily-block{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:24px;overflow:hidden;page-break-inside:avoid}
+.daily-header{background:linear-gradient(135deg,#0f1117 0%,#1e293b 100%);color:#fff;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px}
+.daily-header h3{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:700;margin:0}
+.daily-header .daily-stats{display:flex;gap:20px;font-size:12px;opacity:.9}
+.daily-header .daily-stats span{display:flex;flex-direction:column;align-items:flex-end}
+.daily-header .daily-stats .stat-label{font-size:9px;text-transform:uppercase;opacity:.7}
+.daily-header .daily-stats .stat-value{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:14px}
+.daily-garcom-table{width:100%;border-collapse:collapse}
+.daily-garcom-table thead th{background:#f8fafc;padding:10px 14px;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:#64748b;font-weight:600;text-align:left}
+.daily-garcom-table thead th.tr{text-align:right}
+.daily-garcom-table tbody td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}
+.daily-garcom-table tbody tr:last-child td{border-bottom:none}
+.daily-garcom-table tbody tr:hover td{background:#fafafa}
+.daily-total-row{background:#f0fdf4!important}
+.daily-total-row td{font-weight:700;color:#15803d;border-top:2px solid #bbf7d0!important}
+.daily-day-total{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%);border-top:2px solid #22c55e;font-size:14px;color:#166534}
+
+/* ─── Opções de impressão ─── */
+.print-options{display:flex;align-items:center;gap:16px;margin-left:auto}
+.print-option{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#374151}
+.print-option input[type="checkbox"]{width:16px;height:16px;accent-color:#00c27c;cursor:pointer}
+
+/* ─── Print ─── */
+@media print {
+  body{background:#fff;font-size:11px;margin:0;padding:0}
+  .page{padding:0;max-width:100%;margin:0}
+  .toolbar{display:none!important;height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}
+  .btn,.alertas-wrap,.btn-copy-garcom,.filter-wrap,.print-options{display:none!important}
+  .cards{margin-bottom:16px}
+  .card{break-inside:avoid}
+  .date-block{break-inside:avoid;page-break-inside:avoid}
+  .global-section{box-shadow:none;border:1px solid #e5e7eb;margin-top:10px}
+  .global-header{background:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .daily-summary{display:none!important}
+  .daily-block{box-shadow:none;border:1px solid #e5e7eb;page-break-after:always}
+  .daily-block:last-child{page-break-after:avoid}
+  
+  /* Relatório Individual */
+  .individual-header{background:#1e40af!important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .ind-day-block{box-shadow:none;border:1px solid #e5e7eb;page-break-inside:avoid}
+  .ind-day-header{background:#0f1117!important;print-color-adjust:exact;-webkit-print-color-adjust:exact;cursor:default}
+  .ind-day-content{display:block!important}
+  .ind-toggle-icon{display:none!important}
+  .ind-grand-total{background:#15803d!important;print-color-adjust:exact;-webkit-print-color-adjust:exact;page-break-inside:avoid}
+  .individual-cards{margin-bottom:16px}
+  .ind-card{box-shadow:none;border:1px solid #e5e7eb}
+}
+
+/* Modo impressão por dia */
+body.print-daily .global-section,
+body.print-daily .date-block{display:none!important}
+body.print-daily .daily-summary{display:block!important}
+
+@media print {
+  body.print-daily .daily-summary{display:block!important}
+}
+
+/* Loading */
+.loading{text-align:center;padding:60px;color:#6b7280}
+.loading .spinner{width:40px;height:40px;border:3px solid #e5e7eb;border-top-color:#00c27c;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="loading">
+    <div class="spinner"></div>
+    <div>Carregando relatório...</div>
+  </div>
+</div>
+<script src="src/report-page.js"></script>
+</body>
+</html>
