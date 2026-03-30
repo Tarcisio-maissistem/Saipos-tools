@@ -5,6 +5,17 @@ let isPaused  = false;
 
 const $ = id => document.getElementById(id);
 
+// Produtos isentos de comissão/taxa de serviço
+const PRODUTOS_ISENTOS = [
+  'COUVERT ARTÍSTICO', 'COUVERT ARTISTICO',
+  'COVERT ARTÍSTICO', 'COVERT ARTISTICO'
+];
+function isIsento(nome) {
+  if (!nome) return false;
+  const n = nome.toUpperCase().trim();
+  return PRODUTOS_ISENTOS.some(p => n.includes(p));
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 function setStatus(st, label) {
   $('dot').className = 'dot ' + (st || '');
@@ -173,11 +184,13 @@ function renderResumo(sales) {
   const garcom = {};
   for (const s of sales) {
     if (s.canceled || !s.items) continue;
+    const totalNaoIsento = s.items.filter(i => !i.itemCancelado && !isIsento(i.nome)).reduce((a, i) => a + i.valor * i.qtd, 0);
     for (const item of s.items) {
       if (item.itemCancelado) continue;
       const g  = (item.garcom || '?').toUpperCase().trim();
       const vt = item.valor * item.qtd;
-      const ci = s.totalItens > 0 ? (vt / s.totalItens) * s.taxa : 0;
+      const exempt = isIsento(item.nome);
+      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * s.taxa : 0;
       if (!garcom[g]) garcom[g] = { venda: 0, comissao: 0, qtd: 0 };
       garcom[g].venda    += vt;
       garcom[g].comissao += ci;

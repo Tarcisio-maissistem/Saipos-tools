@@ -4,6 +4,21 @@ let SALES_DATA = [];
 let STORE_NAME = 'Loja Saipos';
 let selectedGarcom = 'TODOS';
 
+// Produtos isentos de comissão/taxa de serviço
+const PRODUTOS_ISENTOS = [
+  'COUVERT ARTÍSTICO', 'COUVERT ARTISTICO',
+  'COVERT ARTÍSTICO', 'COVERT ARTISTICO'
+];
+function isIsento(nome) {
+  if (!nome) return false;
+  const n = nome.toUpperCase().trim();
+  return PRODUTOS_ISENTOS.some(p => n.includes(p));
+}
+function calcTotalNaoIsento(items) {
+  if (!items) return 0;
+  return items.filter(i => !i.itemCancelado && !isIsento(i.nome)).reduce((a, i) => a + i.valor * i.qtd, 0);
+}
+
 // Helpers
 function fmt(n) {
   if (!n) return '0,00';
@@ -54,11 +69,13 @@ function getGlobalGarcom() {
   const globalGarcom = {};
   for (const sale of SALES_DATA) {
     if (sale.canceled || !sale.items) continue;
+    const totalNaoIsento = calcTotalNaoIsento(sale.items);
     for (const item of sale.items) {
       if (item.itemCancelado) continue;
       const g = (item.garcom || '?').toUpperCase().trim();
       const vt = item.valor * item.qtd;
-      const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+      const exempt = isIsento(item.nome);
+      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
       if (!globalGarcom[g]) globalGarcom[g] = { venda: 0, comissao: 0, qtd: 0 };
       globalGarcom[g].venda += vt;
       globalGarcom[g].comissao += ci;
@@ -148,6 +165,10 @@ function renderReport() {
   }
   H += `</tbody></table></div>`;
 
+  H += `<div style="margin-top:8px;padding:6px 14px;font-size:11px;color:#92400e;background:#fefce8;border-radius:6px;border:1px solid #fde68a">
+    <b>*</b> Produto isento de taxa de serviço — não contabilizado na comissão.
+  </div>`;
+
   for (const [dia, dsales] of Object.entries(byDate).sort()) {
     const dItens = dsales.reduce((s, v) => s + (!v.canceled ? v.totalItens : 0), 0);
     const dTaxa = dsales.reduce((s, v) => s + (!v.canceled ? v.taxa : 0), 0);
@@ -211,11 +232,13 @@ function renderReport() {
         H += `<div style="padding:10px 14px;color:#9ca3af;font-size:12px">🚫 Venda cancelada</div>`;
       } else if (sale.items && sale.items.length > 0) {
         const vGarcom = {};
+        const totalNaoIsento = calcTotalNaoIsento(sale.items);
         for (const item of sale.items) {
           if (item.itemCancelado) continue;
           const g = (item.garcom || '?').toUpperCase().trim();
           const vt = item.valor * item.qtd;
-          const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+          const exempt = isIsento(item.nome);
+          const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
           if (!vGarcom[g]) vGarcom[g] = { venda: 0, comissao: 0 };
           vGarcom[g].venda += vt;
           vGarcom[g].comissao += ci;
@@ -233,18 +256,20 @@ function renderReport() {
 
         for (const item of sale.items) {
           const vt = item.valor * item.qtd;
-          const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+          const exempt = isIsento(item.nome);
+          const ci = (!exempt && !item.itemCancelado && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
           const cls = item.itemCancelado ? ' class="tr-cancel"' : '';
           const g = (item.garcom || '?').toUpperCase().trim();
           const showItem = selectedGarcom === 'TODOS' || selectedGarcom === g;
+          const isentoMark = (exempt && !item.itemCancelado) ? ' *' : '';
           
           H += `<tr${cls} data-item-garcom="${g}" style="${showItem ? '' : 'display:none'}">
-  <td>${item.nome}${item.itemCancelado ? ' <span class="badge c-item-cancel">CANC</span>' : ''}</td>
+  <td>${item.nome}${item.itemCancelado ? ' <span class="badge c-item-cancel">CANC</span>' : ''}${isentoMark ? ' <span class="badge" style="background:#fef3c7;color:#92400e;font-size:9px">* ISENTO</span>' : ''}</td>
   <td class="tc">${item.qtd}</td>
   <td><span class="garcom-chip">${item.garcom || '—'}</span></td>
   <td class="tr">R$ ${fmt(item.valor)}</td>
   <td class="tr">R$ ${fmt(vt)}</td>
-  <td class="tr">${item.itemCancelado ? '—' : 'R$ ' + fmt(ci)}</td>
+  <td class="tr">${item.itemCancelado ? '—' : (exempt ? 'R$ 0,00 *' : 'R$ ' + fmt(ci))}</td>
   <td class="tr">${item.itemCancelado ? '—' : '<span class="badge ' + pctClass(pct, false) + '">' + pctLabel(pct, false) + '</span>'}</td>
 </tr>`;
         }
@@ -342,12 +367,14 @@ function renderReport() {
       if (sale.canceled || !sale.items) continue;
       dayTotalItens += sale.totalItens;
       dayTotalTaxa += sale.taxa;
+      const totalNaoIsento = calcTotalNaoIsento(sale.items);
       
       for (const item of sale.items) {
         if (item.itemCancelado) continue;
         const g = (item.garcom || '?').toUpperCase().trim();
         const vt = item.valor * item.qtd;
-        const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+        const exempt = isIsento(item.nome);
+        const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
         
         if (!dayGarcomPrint[g]) dayGarcomPrint[g] = { venda: 0, comissao: 0, itens: [] };
         dayGarcomPrint[g].venda += vt;
@@ -356,7 +383,7 @@ function renderReport() {
           hora: sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11, 16) : '',
           mesa: fmtMesa(sale.mesa),
           comanda: fmtComanda(sale.comanda),
-          nome: item.nome,
+          nome: item.nome + (exempt ? ' *' : ''),
           qtd: item.qtd,
           valor: vt,
           comissao: ci
@@ -545,6 +572,7 @@ function renderIndividualGarcom(garcom) {
   
   for (const sale of SALES_DATA) {
     if (sale.canceled || !sale.items) continue;
+    const totalNaoIsento = calcTotalNaoIsento(sale.items);
     
     for (const item of sale.items) {
       if (item.itemCancelado) continue;
@@ -554,12 +582,13 @@ function renderIndividualGarcom(garcom) {
       const dia = (sale.dateText || 'Sem data').substring(0, 10);
       const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11, 16) : '';
       const vt = item.valor * item.qtd;
-      const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+      const exempt = isIsento(item.nome);
+      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
       
       if (!byDate[dia]) byDate[dia] = { itens: [], totalVenda: 0, totalComissao: 0 };
       byDate[dia].itens.push({
         hora, mesa: fmtMesa(sale.mesa), comanda: fmtComanda(sale.comanda),
-        nome: item.nome, qtd: item.qtd, valor: vt, comissao: ci
+        nome: item.nome + (exempt ? ' *' : ''), qtd: item.qtd, valor: vt, comissao: ci
       });
       byDate[dia].totalVenda += vt;
       byDate[dia].totalComissao += ci;
@@ -696,6 +725,7 @@ function copiarGarcom(garcomEncoded, btn) {
 
   for (const sale of SALES_DATA) {
     if (sale.canceled || !sale.items) continue;
+    const totalNaoIsento = calcTotalNaoIsento(sale.items);
     for (const item of sale.items) {
       if (item.itemCancelado) continue;
       const g = (item.garcom || '?').toUpperCase().trim();
@@ -704,12 +734,13 @@ function copiarGarcom(garcomEncoded, btn) {
       const dia = (sale.dateText || 'Sem data').substring(0, 10);
       const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11,16) : '';
       const vt = item.valor * item.qtd;
-      const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+      const exempt = isIsento(item.nome);
+      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
 
       if (!byDate[dia]) byDate[dia] = [];
       byDate[dia].push({
         hora, mesa: fmtMesa(sale.mesa), comanda: fmtComanda(sale.comanda),
-        nome: item.nome, qtd: item.qtd, valor: vt, comissao: ci
+        nome: item.nome + (exempt ? ' *' : ''), qtd: item.qtd, valor: vt, comissao: ci
       });
 
       totalVenda += vt;
@@ -800,14 +831,17 @@ function copiarTudo() {
         lines.push('   │  ' + '─'.repeat(100));
 
         const vGarcom = {};
+        const totalNaoIsento = calcTotalNaoIsento(sale.items);
         for (const item of sale.items) {
           const vt = item.valor * item.qtd;
-          const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+          const exempt = isIsento(item.nome);
+          const ci = (!exempt && !item.itemCancelado && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
           const nome = (item.nome || '?').substring(0, 32);
           const garcom = (item.garcom || '?').toUpperCase().trim();
           const cancelStr = item.itemCancelado ? ' [CANC]' : '';
+          const isentoStr = (exempt && !item.itemCancelado) ? ' *' : '';
 
-          lines.push('   │  ' + (nome + cancelStr).padEnd(35) + String(item.qtd).padStart(5) + '   ' + garcom.padEnd(15) + ('R$ ' + fmtVal(item.valor)).padStart(14) + ('R$ ' + fmtVal(vt)).padStart(14) + (item.itemCancelado ? '—'.padStart(14) : ('R$ ' + fmtVal(ci)).padStart(14)));
+          lines.push('   │  ' + (nome + cancelStr + isentoStr).padEnd(35) + String(item.qtd).padStart(5) + '   ' + garcom.padEnd(15) + ('R$ ' + fmtVal(item.valor)).padStart(14) + ('R$ ' + fmtVal(vt)).padStart(14) + (item.itemCancelado ? '—'.padStart(14) : ('R$ ' + fmtVal(ci)).padStart(14)));
 
           if (!item.itemCancelado) {
             if (!vGarcom[garcom]) vGarcom[garcom] = { venda: 0, comissao: 0 };
@@ -910,22 +944,24 @@ function exportarCSVCompleto(btn) {
   const filename = 'saipos_relatorio_completo_' + ts + '.csv';
 
   csv += '=== ITENS DETALHADOS ===\n';
-  csv += 'Data;Mesa;Comanda;Hora;Item;Qtde;Garçom;Valor Unit;Total Item;Taxa Venda;Comissão Item;% Taxa;Cancelado\n';
+  csv += 'Data;Mesa;Comanda;Hora;Item;Qtde;Garçom;Valor Unit;Total Item;Taxa Venda;Comissão Item;% Taxa;Cancelado;Isento\n';
   
   for (const sale of SALES_DATA) {
     if (sale.canceled || !sale.items) continue;
     const dia = (sale.dateText || '').substring(0, 10);
     const hora = (sale.dateText || '').substring(11, 19);
     const pct = sale.totalItens > 0 ? (sale.taxa / sale.totalItens * 100) : 0;
+    const totalNaoIsento = calcTotalNaoIsento(sale.items);
     
     for (const item of sale.items) {
       const vt = item.valor * item.qtd;
-      const comissao = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+      const exempt = isIsento(item.nome);
+      const comissao = (!exempt && !item.itemCancelado && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
       csv += [
         escapeCSV(dia), 'M' + fmtMesa(sale.mesa), 'C' + fmtComanda(sale.comanda), escapeCSV(hora),
         escapeCSV(item.nome), item.qtd, escapeCSV(item.garcom), fmtNum(item.valor),
         fmtNum(vt), fmtNum(sale.taxa), item.itemCancelado ? '0,00' : fmtNum(comissao),
-        fmtNum(pct) + '%', item.itemCancelado ? 'SIM' : ''
+        fmtNum(pct) + '%', item.itemCancelado ? 'SIM' : '', exempt ? 'SIM' : ''
       ].join(';') + '\n';
     }
   }
@@ -938,11 +974,13 @@ function exportarCSVCompleto(btn) {
   const garcom = {};
   for (const sale of SALES_DATA) {
     if (sale.canceled || !sale.items) continue;
+    const totalNaoIsento = calcTotalNaoIsento(sale.items);
     for (const item of sale.items) {
       if (item.itemCancelado) continue;
       const g = (item.garcom || '?').toUpperCase().trim();
       const vt = item.valor * item.qtd;
-      const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+      const exempt = isIsento(item.nome);
+      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
       if (!garcom[g]) garcom[g] = { venda: 0, comissao: 0, qtd: 0 };
       garcom[g].venda += vt;
       garcom[g].comissao += ci;

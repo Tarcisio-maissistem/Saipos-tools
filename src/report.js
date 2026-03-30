@@ -2,6 +2,21 @@
 // report.js — Gera relatório HTML completo com comissões
 // ================================================================
 
+// Produtos isentos de comissão/taxa de serviço
+const PRODUTOS_ISENTOS_RPT = [
+  'COUVERT ARTÍSTICO', 'COUVERT ARTISTICO',
+  'COVERT ARTÍSTICO', 'COVERT ARTISTICO'
+];
+function isIsentoRpt(nome) {
+  if (!nome) return false;
+  const n = nome.toUpperCase().trim();
+  return PRODUTOS_ISENTOS_RPT.some(p => n.includes(p));
+}
+function calcTotalNaoIsentoRpt(items) {
+  if (!items) return 0;
+  return items.filter(i => !i.itemCancelado && !isIsentoRpt(i.nome)).reduce((a, i) => a + i.valor * i.qtd, 0);
+}
+
 function fmt(n) {
   if (!n) return '0,00';
   return n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
@@ -237,11 +252,13 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
       } else if (sale.items && sale.items.length > 0) {
         // Calcula subtotais por garçom nesta venda
         const vGarcom = {};
+        const totalNaoIsento = calcTotalNaoIsentoRpt(sale.items);
         for (const item of sale.items) {
           if (item.itemCancelado) continue;
           const g  = (item.garcom || '?').toUpperCase().trim();
           const vt = item.valor * item.qtd;
-          const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+          const exempt = isIsentoRpt(item.nome);
+          const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
           if (!vGarcom[g]) vGarcom[g] = { venda: 0, comissao: 0 };
           vGarcom[g].venda    += vt;
           vGarcom[g].comissao += ci;
@@ -265,15 +282,17 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
 
         for (const item of sale.items) {
           const vt  = item.valor * item.qtd;
-          const ci  = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+          const exempt = isIsentoRpt(item.nome);
+          const ci  = (!exempt && !item.itemCancelado && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
           const cls = item.itemCancelado ? ' class="tr-cancel"' : '';
+          const isentoMark = (exempt && !item.itemCancelado) ? ' <span class="badge" style="background:#fef3c7;color:#92400e;font-size:9px">* ISENTO</span>' : '';
           H += `<tr${cls}>
-  <td>${item.nome}${item.itemCancelado ? ' <span class="badge c-item-cancel">CANC</span>' : ''}</td>
+  <td>${item.nome}${item.itemCancelado ? ' <span class="badge c-item-cancel">CANC</span>' : ''}${isentoMark}</td>
   <td class="tc">${item.qtd}</td>
   <td><span class="garcom-chip">${item.garcom || '—'}</span></td>
   <td class="tr">R$ ${fmt(item.valor)}</td>
   <td class="tr">R$ ${fmt(vt)}</td>
-  <td class="tr">${item.itemCancelado ? '—' : 'R$ ' + fmt(ci)}</td>
+  <td class="tr">${item.itemCancelado ? '—' : (exempt ? 'R$ 0,00 *' : 'R$ ' + fmt(ci))}</td>
   <td class="tr">${item.itemCancelado ? '—' : '<span class="badge ' + pctClass(pct, false) + '">' + pctLabel(pct, false) + '</span>'}</td>
 </tr>`;
         }
@@ -334,6 +353,10 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
   }
   H += `</tbody></table>`;
 
+  H += `<div style="margin-top:8px;padding:6px 14px;font-size:11px;color:#92400e;background:#fefce8;border-radius:6px;border:1px solid #fde68a">
+    <b>*</b> Produto isento de taxa de serviço — não contabilizado na comissão.
+  </div>`;
+
   // ── Seção de alertas (oculta por padrão) ────────────────────
   const semTaxa    = sales.filter(s => !s.canceled && s.totalItens > 0 && s.taxa === 0);
   const baixaTaxa  = sales.filter(s => {
@@ -387,6 +410,21 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
 const SALES_DATA = ${JSON.stringify(sales)};
 const STORE_NAME = '${storeName.replace(/'/g, "\\'")}';
 window.__SAIPOS_STORE_NAME = STORE_NAME;
+
+// Produtos isentos de comissão/taxa de serviço
+const PRODUTOS_ISENTOS = [
+  'COUVERT ARTÍSTICO', 'COUVERT ARTISTICO',
+  'COVERT ARTÍSTICO', 'COVERT ARTISTICO'
+];
+function isIsento(nome) {
+  if (!nome) return false;
+  var n = nome.toUpperCase().trim();
+  return PRODUTOS_ISENTOS.some(function(p) { return n.indexOf(p) >= 0; });
+}
+function calcTotalNaoIsento(items) {
+  if (!items) return 0;
+  return items.filter(function(i) { return !i.itemCancelado && !isIsento(i.nome); }).reduce(function(a, i) { return a + i.valor * i.qtd; }, 0);
+}
 
 // Event Listeners (CSP-compliant, sem onclick inline)
 document.addEventListener('DOMContentLoaded', function() {
@@ -458,6 +496,7 @@ function copiarGarcom(garcomEncoded, btn) {
   
   for (const sale of SALES_DATA) {
     if (sale.canceled || !sale.items) continue;
+    var totalNaoIsentoV = calcTotalNaoIsento(sale.items);
     
     for (const item of sale.items) {
       if (item.itemCancelado) continue;
@@ -467,7 +506,8 @@ function copiarGarcom(garcomEncoded, btn) {
       const dia = (sale.dateText || 'Sem data').substring(0, 10);
       const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11,16) : '';
       const vt = item.valor * item.qtd;
-      const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+      const exempt = isIsento(item.nome);
+      const ci = (!exempt && totalNaoIsentoV > 0) ? (vt / totalNaoIsentoV) * sale.taxa : 0;
       
       if (!byDate[dia]) byDate[dia] = [];
       byDate[dia].push({
@@ -576,14 +616,17 @@ function copiarTudo() {
         lines.push('   │  ' + '─'.repeat(100));
         
         const vGarcom = {};
+        var totalNaoIsentoV2 = calcTotalNaoIsento(sale.items);
         for (const item of sale.items) {
           const vt = item.valor * item.qtd;
-          const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+          const exempt = isIsento(item.nome);
+          const ci = (!exempt && !item.itemCancelado && totalNaoIsentoV2 > 0) ? (vt / totalNaoIsentoV2) * sale.taxa : 0;
           const nome = (item.nome || '?').substring(0, 32);
           const garcom = (item.garcom || '?').toUpperCase().trim();
           const cancelStr = item.itemCancelado ? ' [CANC]' : '';
+          const isentoStr = (exempt && !item.itemCancelado) ? ' *' : '';
           
-          lines.push('   │  ' + (nome + cancelStr).padEnd(35) + String(item.qtd).padStart(5) + '   ' + garcom.padEnd(15) + ('R$ ' + fmtVal(item.valor)).padStart(14) + ('R$ ' + fmtVal(vt)).padStart(14) + (item.itemCancelado ? '—'.padStart(14) : ('R$ ' + fmtVal(ci)).padStart(14)));
+          lines.push('   │  ' + (nome + cancelStr + isentoStr).padEnd(35) + String(item.qtd).padStart(5) + '   ' + garcom.padEnd(15) + ('R$ ' + fmtVal(item.valor)).padStart(14) + ('R$ ' + fmtVal(vt)).padStart(14) + (item.itemCancelado ? '—'.padStart(14) : ('R$ ' + fmtVal(ci)).padStart(14)));
           
           if (!item.itemCancelado) {
             if (!vGarcom[garcom]) vGarcom[garcom] = { venda: 0, comissao: 0 };
@@ -694,17 +737,19 @@ function exportarCSV(tipo, btn) {
   if (tipo === 'itens') {
     // CSV com todos os itens detalhados
     filename = 'saipos_itens_' + ts + '.csv';
-    csv = 'Data;Mesa;Comanda;Hora;Item;Qtde;Garçom;Valor Unit;Total Item;Taxa Venda;Comissão Item;% Taxa;Cancelado\n';
+    csv = 'Data;Mesa;Comanda;Hora;Item;Qtde;Garçom;Valor Unit;Total Item;Taxa Venda;Comissão Item;% Taxa;Cancelado;Isento\n';
     
     for (const sale of SALES_DATA) {
       if (sale.canceled || !sale.items) continue;
       const dia = (sale.dateText || '').substring(0, 10);
       const hora = (sale.dateText || '').substring(11, 19);
       const pct = sale.totalItens > 0 ? (sale.taxa / sale.totalItens * 100) : 0;
+      var tni3 = calcTotalNaoIsento(sale.items);
       
       for (const item of sale.items) {
         const vt = item.valor * item.qtd;
-        const comissao = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+        const exempt = isIsento(item.nome);
+        const comissao = (!exempt && !item.itemCancelado && tni3 > 0) ? (vt / tni3) * sale.taxa : 0;
         csv += [
           escapeCSV(dia),
           escapeCSV(sale.mesa),
@@ -718,7 +763,8 @@ function exportarCSV(tipo, btn) {
           fmtNum(sale.taxa),
           item.itemCancelado ? '0,00' : fmtNum(comissao),
           fmtNum(pct) + '%',
-          item.itemCancelado ? 'SIM' : ''
+          item.itemCancelado ? 'SIM' : '',
+          exempt ? 'SIM' : ''
         ].join(';') + '\n';
       }
     }
@@ -731,11 +777,13 @@ function exportarCSV(tipo, btn) {
     
     for (const sale of SALES_DATA) {
       if (sale.canceled || !sale.items) continue;
+      var tni2 = calcTotalNaoIsento(sale.items);
       for (const item of sale.items) {
         if (item.itemCancelado) continue;
         const g = (item.garcom || '?').toUpperCase().trim();
         const vt = item.valor * item.qtd;
-        const ci = sale.totalItens > 0 ? (vt / sale.totalItens) * sale.taxa : 0;
+        const exempt = isIsento(item.nome);
+        const ci = (!exempt && tni2 > 0) ? (vt / tni2) * sale.taxa : 0;
         if (!garcom[g]) garcom[g] = { venda: 0, comissao: 0, qtd: 0 };
         garcom[g].venda += vt;
         garcom[g].comissao += ci;
