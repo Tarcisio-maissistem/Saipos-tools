@@ -1,4 +1,4 @@
-# Saipos Tools v3.16.0
+# Saipos Tools v3.17.0
 
 Extensão para Google Chrome que extrai dados de vendas do sistema Saipos para cálculo de comissão dos garçons.
 

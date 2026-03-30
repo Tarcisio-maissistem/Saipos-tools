@@ -1,4 +1,4 @@
-// report-page.js — Script externo para o relatório (CSP-compliant) v3.16.0
+// report-page.js — Script externo para o relatório (CSP-compliant) v3.17.0
 
 let SALES_DATA = [];
 let STORE_NAME = 'Loja Saipos';

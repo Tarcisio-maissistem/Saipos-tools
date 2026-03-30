@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Saipos Tools",
-  "version": "3.16.0",
+  "version": "3.17.0",
   "description": "Extrai itens por garçom, calcula comissões e gera relatório.",
   "permissions": ["activeTab", "scripting", "downloads", "storage"],
   "host_permissions": ["https://conta.saipos.com/*"],

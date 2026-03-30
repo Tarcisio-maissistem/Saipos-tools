@@ -1,5 +1,5 @@
 // ================================================================
-// SAIPOS TOOLS v3.16.0 - content.js
+// SAIPOS TOOLS v3.17.0 - content.js
 // Retry + auto-resume com checkpoint apos erro
 // ================================================================
 
@@ -10,7 +10,7 @@
     return;
   }
   window.__saiposInitialized = true;
-  console.log('[Saipos] Inicializando v3.16.0...');
+  console.log('[Saipos] Inicializando v3.17.0...');
 
   const EXT = window.__saiposExt = {
     running: false,
