@@ -1,76 +1,51 @@
 # Saipos Tools v4.8.0
 
-Extensão oficial para Google Chrome que adiciona funcionalidades avançadas ao painel do sistema **Saipos**.
-
-## 📦 Instalação
-
-1. Abra o Chrome e acesse `chrome://extensions/`
-2. Ative o **Modo do desenvolvedor** (canto superior direito)
-3. Clique em **Carregar sem compactação**
-4. Selecione a pasta raiz da extensão (`Saipos Extensão v3.17`)
+Extensão oficial para Google Chrome que adiciona as funcionalidades "Ocultas" ao seu painel Saipos: **Automação de Happy Hour** e **Relatórios de Comissão Limpos**.
 
 ---
 
-## 🚀 Funcionalidade 1: Automação de Happy Hour (NOVO)
+## 📦 Como Instalar
 
-Esta funcionalidade foi desenvolvida utilizando integração direta com a API nativa do Saipos via injeção de Headers e Proxy Requests, sem travamentos na tela.
-
-### Como Usar
-1. Acesse o painel principal do Saipos ou cardápio.
-2. Clique no ícone da extensão para abrir a interface no topo direito.
-3. Na seção **Happy Hour**, preencha:
-   - **Nome do Produto**: Exatamente igual ao que consta no Saipos (Ex: `SKOL 600ML`).
-   - **Preço Normal**: O valor fora de promoção.
-   - **Preço Automático (Promo)**: O valor desejado de desconto.
-   - **Dias da semana e Horário**: Período de vigência da promoção.
-4. Clique em **Salvar**. A extensão fará tudo sozinha!
-
-### Recursos Técnicos (API Direta)
-- **Zero Interferência**: Monitora silenciosamente o horário (`background task`) a cada 30 segundos.
-- **Auto-Configuração**: Atualização real de preços (incluindo todas as variações do produto) diretamente no banco de dados via requisições `PUT`.
-- **Prevenção Conflitos**: Bloqueia injeção de tokens de terceiros (ex: Pendo Analytics) via intercepção assíncrona.
-- **Edição em Tempo Real**: Altere valores sem precisar apagar a regra clicando no botão **Editar**.
+1. Abra o Chrome e cole isto na barra de links: `chrome://extensions/`
+2. No canto superior direito, ative a chavinha: **Modo do desenvolvedor**.
+3. Clique no botão **"Carregar sem compactação"**.
+4. Selecione a pasta da extensão (`Saipos Extensão v3.17`).
+5. Fixe o robôzinho no seu painel do navegador para acesso rápido!
 
 ---
 
-## 📊 Funcionalidade 2: Relatório de Comissão de Garçons (Legado)
+## 🍺 1. Happy Hour Automático
 
-Extrator de dados de vendas para cálculo automático de comissão proporcional aos itens vendidos na mesa.
+A extensão troca o preço dos seus produtos sozinho nas horas e dias marcados, exatamente como você cadastrar.
 
-### Como Usar
-1. Navegue até: **Relatórios > Vendas por Período**
-2. Aplique o filtro de datas desejado e aguarde a tabela principal carregar.
-3. Abra a extensão e clique em **▶ INICIAR**.
-4. Não navegue em outras abas. O robô vai paginar todas as vendas usando *DOM Scraping*.
-5. Após 100%, clique em **📄 RELATÓRIO** para abrir o dashboard consolidado.
+### Como funciona:
+1. Abra a extensão no navegador.
+2. Na aba de "Happy Hour", digite o **Nome Exato** do item (Ex: `SKOL 600ML`).
+3. Coloque o preço original e o preço promocional.
+4. Escolha os dias da semana e a janela de horas.
+5. Clique em **Salvar Promoção**. Pronto!
 
-### O Que Entra no Relatório?
-- Exportação por CSV de Garçons, Itens detalhados e Resumo Geral.
-- Divisão real de **Taxa de Serviço** proporcional ao valor total.
-- Alertas independentes de vendas zeradas ou canceladas.
+Enquanto a extensão/computador estiver rodando com o painel da Saipos aberto, o preço vai cair automaticamente no começo da janela de horas e voltar pro preço normal no fim.
 
----
-
-## 📁 Estrutura de Arquivos
-
-```
-Saipos Extensão/
-├── manifest.json      # Configuração da extensão e permissões de Host
-├── popup.html         # Interface HTML Moderna (Design Saipos Blue)
-├── README.md          # Este arquivo
-└── src/
-    ├── background.js  # Service worker para persistência
-    ├── content.js     # Script principal (DOM/API Fetcher Isolado)
-    ├── interceptor.js # Captura de Bearer Auth/JWT silenciado
-    ├── popup.js       # Controle de state do formulário e Local Storage
-    └── report.js      # Geração do relatório HTML customizado
-```
-
-## ⚠️ Segurança & Requisitos
-- **Google Chrome** versão 88 ou superior recomendada.
-- **Sem senhas**: A extensão reutiliza as credenciais seguras do login ativo no navegador. Não há armazenamento de dados sensíveis na extensão.
+Você também pode clicar no botão **Edição (✏️)** nos itens listados na extensão caso precise alterar uns centavinhos de promoção.
 
 ---
 
-**Versão**: 4.8.0  
-**Última atualização**: Abril 2026
+## 📊 2. Relatório de Comissão de Garçom
+
+A extensão lê todas as vendas da tela num piscar de olhos e monta um CSV limpinho pra você pagar quem vendeu mais mesas.
+
+### Como Gerar:
+1. Acesse sua loja em https://conta.saipos.com.
+2. No menu esquerdo, vá em: **Relatórios > Vendas por Período**.
+3. Escolha o período na Saipos (Ex: Hoje) e aguarde a tabela ser mostrada.
+4. Clique no ícone da nossa Extensão e clique em **▶ INICIAR**.
+5. Aguarde ela passar as páginas e fechar os modais (Não mude a tela!).
+6. Clique no botão azul escuro **📄 RELATÓRIO**. Uma janela nova com planilhas de rateio, comissão sem taxa burla, etc., vai abrir! Export em Excel e seja feliz.
+
+---
+
+## 🔒 Segurança garantida
+Não pedimos suas senhas da Saipos ou acessos em nenhum momento. Tudo continua restrito às proteções originais da sua própria conta!
+
+_Versão mais recente: Abril / 2026_
