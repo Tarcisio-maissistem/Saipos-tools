@@ -1,10 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Saipos Tools",
-  "version": "3.17.0",
-  "description": "Extrai itens por garçom, calcula comissões e gera relatório.",
+  "version": "4.7.0",
+  "description": "Extrai dados de vendas via API REST, calcula comissões por garçom e gera relatório.",
   "permissions": ["activeTab", "scripting", "downloads", "storage"],
-  "host_permissions": ["https://conta.saipos.com/*"],
+  "host_permissions": [
+    "https://conta.saipos.com/*",
+    "https://*.saipos.com/*"
+  ],
   "icons": {
     "16": "icon16.png",
     "48": "icon48.png",
@@ -18,6 +21,12 @@
     }
   },
   "content_scripts": [
+    {
+      "matches": ["https://conta.saipos.com/*"],
+      "js": ["src/interceptor.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
     {
       "matches": ["https://conta.saipos.com/*"],
       "js": ["src/content.js"],

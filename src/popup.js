@@ -1,5 +1,6 @@
 // popup.js
 let allSales = [];
+let allDateRange = null;
 let isRunning = false;
 let isPaused  = false;
 
@@ -8,7 +9,8 @@ const $ = id => document.getElementById(id);
 // Produtos isentos de comissão/taxa de serviço
 const PRODUTOS_ISENTOS = [
   'COUVERT ARTÍSTICO', 'COUVERT ARTISTICO',
-  'COVERT ARTÍSTICO', 'COVERT ARTISTICO'
+  'COVERT ARTÍSTICO', 'COVERT ARTISTICO',
+  'BRINQUEDOTECA'
 ];
 function isIsento(nome) {
   if (!nome) return false;
@@ -72,7 +74,31 @@ async function sendContent(action) {
   if (!tab) return null;
   return chrome.tabs.sendMessage(tab.id, { action }).catch(() => null);
 }
+// ── API STATUS ───────────────────────────────────────────
+function setApiStatus(status, label) {
+  const dot = $('apiDot');
+  const lbl = $('apiLabel');
+  dot.className = 'api-dot ' + (status || '');
+  lbl.textContent = label;
+}
 
+$('bTest').addEventListener('click', async () => {
+  const ok = await checkUrl();
+  if (!ok) return;
+  setApiStatus('warn', 'API: testando...');
+  const result = await sendContent('TEST_API');
+  if (!result) {
+    setApiStatus('err', 'API: sem resposta do content script');
+    return;
+  }
+  if (result.auth && result.listing) {
+    setApiStatus('ok', 'API: OK — ' + result.salesCount + ' vendas encontradas');
+  } else if (result.auth) {
+    setApiStatus('warn', 'API: auth OK, endpoint não encontrado. Aplique o filtro.');
+  } else {
+    setApiStatus('err', 'API: sem auth. Faça login no Saipos.');
+  }
+});
 // ── INICIAR ──────────────────────────────────────────────────
 $('bStart').addEventListener('click', async () => {
   const ok = await checkUrl();
@@ -142,7 +168,8 @@ $('bReport').addEventListener('click', async () => {
   await chrome.storage.local.set({
     saiposReportData: {
       sales: allSales,
-      storeName: storeName
+      storeName: storeName,
+      dateRange: allDateRange
     }
   });
 
@@ -164,7 +191,9 @@ chrome.runtime.onMessage.addListener(msg => {
     addLog({ msg: '❌ ' + (msg.msg || 'Erro desconhecido'), type: 'error', time: new Date().toLocaleTimeString('pt-BR') });
   }
   if (msg.type === 'DONE') {
+    if (allSales.length > 0 && msg.sales) return; // Prevent double DONE (background re-broadcasts)
     allSales  = msg.sales;
+    allDateRange = msg.dateRange || null;
     isRunning = false;
     setStatus('done', `✅ ${allSales.length} vendas concluídas`);
     setButtons(false);
@@ -321,6 +350,210 @@ async function restoreState() {
   }
 }
 
+// ── Happy Hour Promo Logic ───────────────────────────────
+let hhPromos = [];
+
+// ── Currency Mask ────────────────────────────────────────
+function applyCurrencyMask(input) {
+  input.addEventListener('input', () => {
+    let v = input.value.replace(/\D/g, '');
+    if (!v) { input.value = ''; return; }
+    v = (parseInt(v, 10) / 100).toFixed(2);
+    input.value = 'R$ ' + v.replace('.', ',');
+  });
+}
+
+function parseCurrency(str) {
+  if (!str) return NaN;
+  return parseFloat(str.replace(/[^\d,]/g, '').replace(',', '.'));
+}
+
+function formatCurrency(val) {
+  return 'R$ ' + val.toFixed(2).replace('.', ',');
+}
+
+function initHH() {
+  // Toggle dias
+  document.querySelectorAll('.day-btn').forEach(btn => {
+    btn.addEventListener('click', () => btn.classList.toggle('active'));
+  });
+
+  // Máscaras de moeda
+  applyCurrencyMask($('hhPriceNormal'));
+  applyCurrencyMask($('hhPricePromo'));
+
+  // Salvar
+  $('bSaveHH').addEventListener('click', saveHH);
+
+  $('btnHHExport').addEventListener('click', exportConfig);
+  $('btnHHImport').addEventListener('click', () => $('hhImportFile').click());
+  $('hhImportFile').addEventListener('change', (e) => {
+    if (e.target.files.length > 0) importConfig(e.target.files[0]);
+  });
+
+  loadPromos();
+}
+
+async function exportConfig() {
+  const data = await chrome.storage.local.get(null);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `saipos_tools_backup_${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importConfig(file) {
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (confirm('Isso irá sobrescrever as configurações atuais (Happy Hour, Logs, etc). Continuar?')) {
+        await chrome.storage.local.clear();
+        await chrome.storage.local.set(data);
+        alert('Backup restaurado com sucesso! Reiniciando...');
+        window.location.reload();
+      }
+    } catch (err) {
+      alert('Erro ao importar arquivo: arquivo inválido ou corrompido.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function saveHH() {
+    const editId = $('hhEditId').value;
+    const prod = $('hhProd').value.trim();
+    const priceNormal = parseCurrency($('hhPriceNormal').value);
+    const pricePromo = parseCurrency($('hhPricePromo').value);
+    const startTime = $('hhStart').value;
+    const endTime = $('hhEnd').value;
+    const days = Array.from(document.querySelectorAll('.day-btn.active')).map(b => parseInt(b.dataset.day));
+
+    if (!prod || isNaN(priceNormal) || isNaN(pricePromo) || !startTime || !endTime || days.length === 0) {
+      alert('Preencha o Nome Exato do Produto, Preços e selecione ao menos um dia.');
+      return;
+    }
+
+    if (editId) {
+      const existing = hhPromos.find(x => x.id === editId);
+      if (existing) {
+        existing.prod = prod;
+        existing.priceNormal = priceNormal;
+        existing.pricePromo = pricePromo;
+        existing.startTime = startTime;
+        existing.endTime = endTime;
+        existing.days = days;
+        existing.lastApplied = null; // forçar reavaliação imediata
+      }
+    } else {
+      const newPromo = {
+        id: Date.now().toString(),
+        prod,
+        priceNormal,
+        pricePromo,
+        startTime,
+        endTime,
+        days,
+        active: true,
+        lastApplied: null
+      };
+      hhPromos.push(newPromo);
+    }
+    
+    await chrome.storage.local.set({ saipos_happyhour: hhPromos });
+    
+    // Limpar form
+    $('hhEditId').value = '';
+    $('hhProd').value = '';
+    $('hhPriceNormal').value = '';
+    $('hhPricePromo').value = '';
+    $('bSaveHH').textContent = '+ SALVAR PROMOÇÃO';
+    
+    renderPromos();
+}
+
+
+async function loadPromos() {
+  const res = await chrome.storage.local.get('saipos_happyhour');
+  hhPromos = res.saipos_happyhour || [];
+  renderPromos();
+}
+
+const DAYS_SHORT = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
+
+function renderPromos() {
+  const container = $('hhList');
+  if (hhPromos.length === 0) {
+    container.innerHTML = '<div class="empty" style="padding:20px"><big>⏰</big>Nenhuma promoção cadastrada.</div>';
+    return;
+  }
+
+  container.innerHTML = hhPromos.map(p => `
+    <div class="hh-item">
+      <div class="hh-info">
+        <div class="hh-name"><span class="hh-status ${p.active ? 'on' : 'off'}"></span>${p.prod} <span style="opacity:0.5;font-weight:400;font-size:10px">(#${p.saiposId || p.id.substring(0,4)})</span></div>
+        <div class="hh-details">📅 ${p.days.map(d => DAYS_SHORT[d]).join(', ')} • ⏰ ${p.startTime} às ${p.endTime}</div>
+        <div class="hh-price">
+          <span class="p-old">${formatCurrency(p.priceNormal)}</span>
+          <span class="p-new">${formatCurrency(p.pricePromo)}</span>
+        </div>
+      </div>
+      <div class="hh-actions">
+        <button class="btn-sm b-tgl ${p.active ? '' : 'off'}" data-id="${p.id}">${p.active ? '✅ ATIVO' : '⏸ OFF'}</button>
+        <button class="btn-sm b-edit" data-id="${p.id}" style="background:var(--p2);color:white">✏️ EDITAR</button>
+        <button class="btn-sm b-del" data-id="${p.id}">🗑 EXCLUIR</button>
+      </div>
+    </div>
+  `).join('');
+
+  // Listeners das ações
+  container.querySelectorAll('.b-del').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      hhPromos = hhPromos.filter(x => x.id !== btn.dataset.id);
+      await chrome.storage.local.set({ saipos_happyhour: hhPromos });
+      renderPromos();
+    });
+  });
+
+  container.querySelectorAll('.b-edit').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = hhPromos.find(x => x.id === btn.dataset.id);
+      if (p) {
+        $('hhEditId').value = p.id;
+        $('hhProd').value = p.prod;
+        $('hhPriceNormal').value = formatCurrency(p.priceNormal);
+        $('hhPricePromo').value = formatCurrency(p.pricePromo);
+        $('hhStart').value = p.startTime;
+        $('hhEnd').value = p.endTime;
+        
+        document.querySelectorAll('.day-btn').forEach(b => {
+          b.classList.toggle('active', p.days.includes(parseInt(b.dataset.day)));
+        });
+        
+        $('bSaveHH').textContent = '💾 ATUALIZAR PROMOÇÃO';
+        $('hhProd').focus();
+        // Rola pro topo suavemente
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  });
+
+  container.querySelectorAll('.b-tgl').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const p = hhPromos.find(x => x.id === btn.dataset.id);
+      if (p) {
+        p.active = !p.active;
+        await chrome.storage.local.set({ saipos_happyhour: hhPromos });
+        renderPromos();
+      }
+    });
+  });
+}
+
 // ── Init ─────────────────────────────────────────────────────
 checkUrl();
 restoreState();
+initHH();

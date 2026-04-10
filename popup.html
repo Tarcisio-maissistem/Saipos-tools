@@ -7,9 +7,17 @@
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0b0d13;--s1:#131720;--s2:#1c2130;--s3:#242b3d;
-  --acc:#00e5a0;--acc2:#f97316;--warn:#fbbf24;
-  --txt:#dde1eb;--muted:#5a6380;--bord:#262d42;
+  --bg:#f4f6f8;       /* Fundo mais claro e limpo */
+  --s1:#ffffff;       /* Fundo de painéis e barras */
+  --s2:#eef2f6;       /* Hover states e painéis secundários */
+  --s3:#e3e8ee;       /* Bordas fracas */
+  --acc:#00a3ff;      /* SAIPOS BLUE VIBRANTE */
+  --acc2:#ff4b4b;     /* Vermelho alerta/exclusão */
+  --warn:#ffb300;     /* Amarelo de Pausado/Atenção */
+  --txt:#2c3e50;      /* Texto principal escuro */
+  --muted:#7f8c8d;    /* Texto secundário */
+  --bord:#dcdfe6;     /* Linhas e bordas */
+  --p2: #0284c7;      /* Azul escuro para botões secundários */
   --r:8px
 }
 body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
@@ -22,13 +30,13 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
 .logo{width:38px;height:38px;background:var(--acc);border-radius:9px;display:flex;
       align-items:center;justify-content:center;
       font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:19px;
-      color:#0b0d13;flex-shrink:0}
+      color:#ffffff;flex-shrink:0}
 .hdr-text h1{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;color:var(--acc)}
 .hdr-text p{color:var(--muted);font-size:10px;margin-top:1px}
 
 /* ─── URL check ─── */
-.url-warn{background:#2d1f00;border:1px solid #f97316;border-radius:var(--r);
-          padding:8px 12px;margin:10px 12px;font-size:11px;color:#fdba74;display:none}
+.url-warn{background:#fff8e1;border:1px solid var(--warn);border-radius:var(--r);
+          padding:8px 12px;margin:10px 12px;font-size:11px;color:#d59b00;display:none}
 .url-warn.show{display:block}
 
 /* ─── Status ─── */
@@ -55,14 +63,14 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
      font-size:11px;font-weight:700;cursor:pointer;transition:.15s;letter-spacing:.3px}
 .btn:active{transform:scale(.97)}
 .btn:disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
-.b-start{background:var(--acc);color:#0b0d13}
-.b-start:hover{background:#00ffb8}
-.b-pause{background:var(--warn);color:#0b0d13}
-.b-pause:hover{background:#fde68a}
+.b-start{background:var(--acc);color:#ffffff}
+.b-start:hover{background:#008af0}
+.b-pause{background:var(--warn);color:#ffffff}
+.b-pause:hover{background:#e5a100}
 .b-stop{background:var(--s2);color:var(--acc2);border:1px solid var(--acc2)}
-.b-stop:hover{background:var(--acc2);color:#fff}
+.b-stop:hover{background:var(--acc2);color:#ffffff}
 .b-report{background:var(--s2);color:var(--acc);border:1px solid var(--acc)}
-.b-report:hover{background:var(--acc);color:#0b0d13}
+.b-report:hover{background:var(--acc);color:#ffffff}
 
 /* ─── Tabs ─── */
 .tabs{display:flex;border-bottom:1px solid var(--bord);background:var(--s1)}
@@ -112,6 +120,55 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
 /* ─── Empty ─── */
 .empty{padding:50px 14px;text-align:center;color:var(--muted);line-height:2}
 .empty big{font-size:28px;display:block;margin-bottom:6px}
+
+/* ─── API Status ─── */
+.api-status{display:flex;align-items:center;gap:8px;padding:6px 14px;background:var(--s1);
+            border-bottom:1px solid var(--bord);font-size:10px}
+.api-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
+.api-dot.ok{background:var(--acc)}
+.api-dot.err{background:var(--acc2)}
+.api-dot.warn{background:var(--warn)}
+#apiLabel{color:var(--muted);flex:1}
+.btn-test{padding:3px 10px;border:1px solid var(--bord);border-radius:4px;background:var(--s2);
+          color:var(--acc);font-size:9px;font-weight:700;cursor:pointer;text-transform:uppercase;
+          letter-spacing:.5px;transition:.15s}
+.btn-test:hover{background:var(--s3);border-color:var(--acc)}
+
+/* ─── Happy Hour ─── */
+.hh-form{padding:16px;background:linear-gradient(135deg, rgba(0,163,255,.05), rgba(2,132,199,.05));border-bottom:1px solid var(--bord);
+         backdrop-filter:blur(8px)}
+.hh-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.f-group{display:flex;flex-direction:column;gap:4px}
+.f-group label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.f-inp{background:var(--s2);border:1px solid var(--bord);color:var(--txt);padding:8px 10px;border-radius:6px;font-size:12px;
+       transition:border-color .2s, box-shadow .2s}
+.f-inp:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 2px rgba(0,229,160,.15)}
+.f-inp::placeholder{color:rgba(255,255,255,.2)}
+.day-sel{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
+.day-btn{padding:5px 8px;background:var(--s2);border:1px solid var(--bord);border-radius:6px;font-size:9px;cursor:pointer;color:var(--muted);
+         transition:all .15s ease;font-weight:600}
+.day-btn:hover{border-color:var(--acc);color:var(--acc)}
+.day-btn.active{background:var(--acc);color:#0b0d13;border-color:var(--acc);transform:scale(1.05)}
+.hh-item{padding:12px 14px;border-bottom:1px solid var(--bord);display:flex;align-items:center;gap:12px;
+         transition:background .15s}
+.hh-item:hover{background:rgba(0,229,160,.03)}
+.hh-info{flex:1}
+.hh-name{font-weight:700;color:var(--acc);font-size:12px;letter-spacing:.3px}
+.hh-details{font-size:10px;color:var(--muted);margin-top:3px}
+.hh-price{font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:3px}
+.p-old{text-decoration:line-through;margin-right:5px;opacity:.4}
+.p-new{color:var(--acc);font-weight:700}
+.hh-actions{display:flex;gap:8px}
+.btn-sm{padding:5px 10px;font-size:9px;border:none;border-radius:5px;cursor:pointer;font-weight:700;
+        transition:all .15s ease;letter-spacing:.3px}
+.b-del{background:rgba(239,68,68,.1);color:#ef4444}
+.b-del:hover{background:#ef4444;color:#fff;transform:scale(1.05)}
+.b-tgl{background:var(--s3);color:var(--txt)}
+.b-tgl:hover{background:var(--s2)}
+.b-tgl.off{opacity:.5}
+.hh-status{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:6px}
+.hh-status.on{background:var(--acc);box-shadow:0 0 6px var(--acc)}
+.hh-status.off{background:var(--muted)}
 </style>
 </head>
 <body>
@@ -120,7 +177,7 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
   <div class="logo">O</div>
   <div class="hdr-text">
     <h1>Saipos Tools</h1>
-    <p>Robô extrator · conta.saipos.com · v3.17.0</p>
+    <p>API Scraper · conta.saipos.com · v4.6.0</p>
   </div>
 </div>
 
@@ -138,6 +195,12 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
   <div id="progLabel">0 / 0 vendas</div>
 </div>
 
+<div class="api-status" id="apiStatus">
+  <span class="api-dot" id="apiDot"></span>
+  <span id="apiLabel">API: aguardando...</span>
+  <button class="btn-test" id="bTest">TESTAR API</button>
+</div>
+
 <div class="btns">
   <button class="btn b-start"  id="bStart">▶ INICIAR</button>
   <button class="btn b-pause"  id="bPause" disabled>⏸ PAUSAR</button>
@@ -149,6 +212,8 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
   <div class="tab active" data-tab="log">LOG</div>
   <div class="tab" data-tab="resumo">GARÇONS</div>
   <div class="tab" data-tab="alertas">ALERTAS</div>
+  <div class="tab" data-tab="happyhour">HAPPY HOUR</div>
+</div>
 </div>
 
 <div class="panel active" id="panel-log">
@@ -162,6 +227,58 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
 
 <div class="panel" id="panel-alertas">
   <div class="empty"><big>⚠️</big>Nenhum alerta ainda.</div>
+</div>
+
+<div class="panel" id="panel-happyhour">
+  <div class="hh-form">
+    <input type="hidden" id="hhEditId" value="">
+    <div class="f-group" style="margin-bottom:10px">
+      <label>🏷️ Nome (ID Exato no Saipos)</label>
+      <input type="text" class="f-inp" id="hhProd" placeholder="Ex: SKOL 600ML">
+    </div>
+    <div class="hh-grid">
+      <div class="f-group">
+        <label>💰 Preço Normal</label>
+        <input type="text" class="f-inp money-mask" id="hhPriceNormal" placeholder="R$ 0,00" inputmode="numeric">
+      </div>
+      <div class="f-group">
+        <label>🏷️ Preço Promo</label>
+        <input type="text" class="f-inp money-mask" id="hhPricePromo" placeholder="R$ 0,00" inputmode="numeric">
+      </div>
+    </div>
+    <label style="font-size:9px;color:var(--muted);text-transform:uppercase">Dias da Semana</label>
+    <div class="day-sel" id="hhDays">
+      <div class="day-btn" data-day="0">DOM</div>
+      <div class="day-btn" data-day="1">SEG</div>
+      <div class="day-btn" data-day="2">TER</div>
+      <div class="day-btn" data-day="3">QUA</div>
+      <div class="day-btn" data-day="4">QUI</div>
+      <div class="day-btn" data-day="5">SEX</div>
+      <div class="day-btn" data-day="6">SAB</div>
+    </div>
+    <div class="hh-grid">
+      <div class="f-group">
+        <label>Início</label>
+        <input type="time" class="f-inp" id="hhStart" value="18:00">
+      </div>
+      <div class="f-group">
+        <label>Fim</label>
+        <input type="time" class="f-inp" id="hhEnd" value="20:00">
+      </div>
+    </div>
+    <button class="btn b-start" id="bSaveHH" style="width:100%;margin-top:10px">+ SALVAR PROMOÇÃO</button>
+  </div>
+  <div id="hhList">
+    <!-- Items dynamically added here -->
+  </div>
+  <div class="hh-backup-area" style="margin-top: 20px; border-top: 1px dotted var(--s3); padding-top: 15px; display: flex; flex-direction: column; gap: 8px;">
+    <div style="font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase;">Backup e Segurança</div>
+    <div style="display: flex; gap: 8px;">
+      <button id="btnHHExport" class="btn-sm b-tgl" style="flex:1" title="Salva suas configurações em um arquivo no PC">💾 EXPORTAR BACKUP</button>
+      <button id="btnHHImport" class="btn-sm b-tgl" style="flex:1" title="Restaura configurações de um arquivo salvo">📥 IMPORTAR BACKUP</button>
+    </div>
+    <input type="file" id="hhImportFile" style="display:none" accept=".json">
+  </div>
 </div>
 
 <script src="src/popup.js"></script>

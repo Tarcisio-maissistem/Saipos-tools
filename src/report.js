@@ -5,7 +5,8 @@
 // Produtos isentos de comissão/taxa de serviço
 const PRODUTOS_ISENTOS_RPT = [
   'COUVERT ARTÍSTICO', 'COUVERT ARTISTICO',
-  'COVERT ARTÍSTICO', 'COVERT ARTISTICO'
+  'COVERT ARTÍSTICO', 'COVERT ARTISTICO',
+  'BRINQUEDOTECA'
 ];
 function isIsentoRpt(nome) {
   if (!nome) return false;

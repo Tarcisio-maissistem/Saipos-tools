@@ -39,9 +39,11 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
 /* ─── Bloco de data ─── */
 .date-block{margin-bottom:24px}
 .date-header{background:#0f1117;color:#fff;padding:10px 16px;border-radius:10px 10px 0 0;
-             display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+             display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;cursor:pointer;transition:background .15s;user-select:none}
+.date-header:hover{background:#1e293b}
 .date-header .dh-title{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700}
 .date-header .dh-info{display:flex;gap:16px;font-size:11px;opacity:.8;flex-wrap:wrap}
+.date-toggle-icon{font-size:12px;opacity:.7;transition:transform .2s}
 .date-content{background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;overflow:hidden}
 
 /* ─── Venda (mesa/comanda) ─── */
@@ -192,6 +194,8 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
   .date-block{break-inside:avoid;page-break-inside:avoid}
   .global-section{box-shadow:none;border:1px solid #e5e7eb;margin-top:10px}
   .global-header{background:#fff;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .date-content-collapsible{display:block!important}
+  .date-toggle-icon{display:none!important}
   .daily-summary{display:none!important}
   .daily-block{box-shadow:none;border:1px solid #e5e7eb;page-break-after:always}
   .daily-block:last-child{page-break-after:avoid}

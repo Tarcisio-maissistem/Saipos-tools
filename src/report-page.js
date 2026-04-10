@@ -1,7 +1,8 @@
-// report-page.js — Script externo para o relatório (CSP-compliant) v3.17.0
+// report-page.js — Script externo para o relatório (CSP-compliant) v4.6.0
 
 let SALES_DATA = [];
 let STORE_NAME = 'Loja Saipos';
+let DATE_RANGE = null;
 let selectedGarcom = 'TODOS';
 
 // Produtos isentos de comissão/taxa de serviço
@@ -58,6 +59,11 @@ chrome.storage.local.get(['saiposReportData'], function(result) {
   if (result.saiposReportData) {
     SALES_DATA = result.saiposReportData.sales || [];
     STORE_NAME = result.saiposReportData.storeName || 'Loja Saipos';
+    DATE_RANGE = result.saiposReportData.dateRange || null;
+    if (DATE_RANGE && DATE_RANGE.start && DATE_RANGE.end) {
+      const fd = (d) => { const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
+      document.title = 'Relatório ' + fd(DATE_RANGE.start) + ' a ' + fd(DATE_RANGE.end) + ' – Saipos Tools';
+    }
     renderReport();
     chrome.storage.local.remove(['saiposReportData']);
   } else {
@@ -98,28 +104,46 @@ function renderReport() {
   }
 
   let gtItens = 0, gtTaxa = 0, gtCanceladas = 0, gtSemTaxa = 0, gtBaixaTaxa = 0;
+  let gtVendasAtivas = 0;
   for (const s of sales) {
     if (s.canceled) { gtCanceladas++; continue; }
+    gtVendasAtivas++;
     gtItens += s.totalItens;
     gtTaxa += s.taxa;
     const p = s.totalItens > 0 ? s.taxa / s.totalItens * 100 : 0;
     if (s.totalItens > 0 && s.taxa === 0) gtSemTaxa++;
     if (s.totalItens > 0 && p > 0 && p < 9.95) gtBaixaTaxa++;
   }
+  const ticketMedio = gtVendasAtivas > 0 ? gtItens / gtVendasAtivas : 0;
 
   const garconsList = Object.keys(globalGarcom).sort();
+
+  const totalComissaoGlobal = Object.values(globalGarcom).reduce((a, v) => a + v.comissao, 0);
+
+  // Formata período de datas
+  let periodoLabel = '';
+  if (DATE_RANGE && DATE_RANGE.start && DATE_RANGE.end) {
+    const fmtDate = (d) => { const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
+    periodoLabel = fmtDate(DATE_RANGE.start) + ' a ' + fmtDate(DATE_RANGE.end);
+  } else {
+    const dates = sales.filter(s => s.dateText).map(s => s.dateText.substring(0, 10)).sort();
+    if (dates.length > 0) periodoLabel = dates[0] + ' a ' + dates[dates.length - 1];
+  }
 
   let H = `
 <div class="header">
   <div class="logo">S</div>
   <div><h1>Relatório de Comissões</h1>
   <div class="store-name">🏪 ${storeName}</div>
+  ${periodoLabel ? `<div class="store-name" style="font-size:13px;color:#64748b">📅 Período: ${periodoLabel}</div>` : ''}
   <p>Gerado em ${new Date().toLocaleString('pt-BR')} · Saipos Tools</p></div>
 </div>
 
 <div class="cards">
   <div class="card ok"><div class="cl">Total em Itens</div><div class="cv">R$ ${fmt(gtItens)}</div></div>
   <div class="card ok"><div class="cl">Taxa de Serviço</div><div class="cv">R$ ${fmt(gtTaxa)}</div></div>
+  <div class="card ok"><div class="cl">💰 Total Comissões</div><div class="cv">R$ ${fmt(totalComissaoGlobal)}</div></div>
+  <div class="card ok"><div class="cl">Ticket Médio</div><div class="cv">R$ ${fmt(ticketMedio)}</div></div>
   <div class="card ok"><div class="cl">Taxa média</div><div class="cv">${gtItens > 0 ? (gtTaxa/gtItens*100).toFixed(1).replace('.',',') : '0,0'}%</div></div>
   <div class="card warn"><div class="cl">Taxa &lt; 10%</div><div class="cv">${gtBaixaTaxa} vendas</div></div>
   <div class="card bad"><div class="cl">Sem Taxa</div><div class="cv">${gtSemTaxa} vendas</div></div>
@@ -191,8 +215,11 @@ function renderReport() {
     }
 
     H += `<div class="date-block" data-dia="${dia}" style="${diaTemGarcom ? '' : 'display:none'}">
-<div class="date-header">
-  <span class="dh-title">📅 ${dia}</span>
+<div class="date-header date-toggle" data-dia-toggle="${dia}">
+  <div style="display:flex;align-items:center;gap:8px">
+    <span class="date-toggle-icon">▶</span>
+    <span class="dh-title">📅 ${dia}</span>
+  </div>
   <div class="dh-info">
     <span>Itens: R$ ${fmt(dItens)}</span>
     <span>Taxa: R$ ${fmt(dTaxa)}</span>
@@ -200,7 +227,7 @@ function renderReport() {
     <span>${dsales.length} vendas</span>
   </div>
 </div>
-<div class="date-content">`;
+<div class="date-content date-content-collapsible" data-dia-content="${dia}" style="display:none">`;
 
     for (const sale of dsales) {
       const pct = sale.totalItens > 0 ? sale.taxa / sale.totalItens * 100 : 0;
@@ -463,6 +490,21 @@ function setupEventListeners() {
     btn.addEventListener('click', function() {
       const garcomEncoded = this.getAttribute('data-garcom');
       copiarGarcom(garcomEncoded, this);
+    });
+  });
+
+  // Day section toggle (collapsed by default)
+  document.querySelectorAll('.date-toggle').forEach(function(header) {
+    header.style.cursor = 'pointer';
+    header.addEventListener('click', function() {
+      const dia = this.getAttribute('data-dia-toggle');
+      const content = document.querySelector('[data-dia-content="' + dia + '"]');
+      const icon = this.querySelector('.date-toggle-icon');
+      if (content) {
+        const isVisible = content.style.display !== 'none';
+        content.style.display = isVisible ? 'none' : '';
+        if (icon) icon.textContent = isVisible ? '▶' : '▼';
+      }
     });
   });
 }
