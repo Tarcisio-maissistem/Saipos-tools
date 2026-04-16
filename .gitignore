@@ -1,0 +1,23 @@
+# Preferências pessoais
+Claude.md
+
+# Ícones não utilizados
+*.ico
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
+
+# Pacotes
+node_modules/
+package-lock.json
+
+# Build
+dist/
+*.zip

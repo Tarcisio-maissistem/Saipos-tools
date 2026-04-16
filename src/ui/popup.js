@@ -182,7 +182,7 @@ $('bReport').addEventListener('click', async () => {
   });
 
   // Abre a página de relatório (CSP-compliant)
-  chrome.tabs.create({ url: chrome.runtime.getURL('report.html') });
+  chrome.tabs.create({ url: chrome.runtime.getURL('pages/report.html') });
 });
 
 // ── Mensagens vindas do content / background ─────────────────

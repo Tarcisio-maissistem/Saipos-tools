@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Saipos Tools",
-  "version": "6.5.0",
+  "version": "6.5.1",
   "description": "Extrai dados de vendas via API REST, calcula comissões por garçom e gera relatório.",
   "permissions": ["activeTab", "scripting", "downloads", "storage", "sidePanel"],
   "host_permissions": [
@@ -9,42 +9,42 @@
     "https://*.saipos.com/*"
   ],
   "icons": {
-    "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "side_panel": {
-    "default_path": "popup.html"
+    "default_path": "pages/popup.html"
   },
   "action": {
     "default_title": "Abrir Painel",
     "default_icon": {
-      "16": "icon16.png",
-      "48": "icon48.png"
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
     }
   },
   "content_scripts": [
     {
       "matches": ["https://conta.saipos.com/*"],
-      "js": ["src/interceptor.js"],
+      "js": ["src/content/interceptor.js"],
       "world": "MAIN",
       "run_at": "document_start"
     },
     {
       "matches": ["https://conta.saipos.com/*"],
-      "js": ["src/content.js"],
+      "js": ["src/content/content.js"],
       "run_at": "document_idle"
     },
     {
       "matches": ["https://conta.saipos.com/*"],
-      "js": ["src/partial-payment.js"],
+      "js": ["src/content/partial-payment.js"],
       "run_at": "document_idle"
     }
   ],
   "background": { "service_worker": "src/background.js" },
   "web_accessible_resources": [
     {
-      "resources": ["src/report.js"],
+      "resources": ["src/lib/report.js"],
       "matches": ["https://conta.saipos.com/*"]
     }
   ]

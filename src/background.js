@@ -14,7 +14,7 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
     chrome.sidePanel.setOptions({
       tabId,
       enabled: isSaipos,
-      path: isSaipos ? 'popup.html' : undefined
+      path: isSaipos ? 'pages/popup.html' : undefined
     }).catch(() => {});
   }
 });
