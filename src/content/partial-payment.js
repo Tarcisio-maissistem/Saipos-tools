@@ -488,7 +488,7 @@
   }
 
   // Restaura valores originais dos itens (SAIPOS frac. proporcional após pagamento)
-  // Fórmula: ratio = (totalAtual + totalPago) / totalAtual
+  // v6.6.1 — corrige arredondamento de centavos
   function restoreOriginalValues(items, totalGeral, totalPago) {
     if (totalPago <= 0 || totalGeral <= 0) return { items, totalOriginal: totalGeral };
 
@@ -496,14 +496,35 @@
     const ratio = totalOriginal / totalGeral;
 
     const restoredItems = items.map(item => {
+      // Restaura quantidade
       let qtd = item.qtd * ratio;
-      // Snap para inteiro se estiver próximo (ex: 0.997 → 1, 4.002 → 4)
       if (Math.abs(qtd - Math.round(qtd)) < 0.08) qtd = Math.round(qtd);
       else qtd = Math.round(qtd * 100) / 100;
 
-      const valor = Math.round(item.valor * ratio * 100) / 100;
+      let valor;
+      if (item.valorUnit && item.valorUnit > 0) {
+        // Se tem preço unitário, recalcula direto (sem erro de arredondamento)
+        valor = Math.round(qtd * item.valorUnit * 100) / 100;
+      } else {
+        valor = Math.round(item.valor * ratio * 100) / 100;
+      }
+
       return { ...item, qtd, valor };
     });
+
+    // Correção de centavos: ajusta diferença entre soma e total esperado
+    const somaRestored = restoredItems.reduce((s, i) => s + i.valor, 0);
+    const diff = Math.round((totalOriginal - somaRestored) * 100);
+    if (diff !== 0 && Math.abs(diff) <= restoredItems.length) {
+      // Distribui centavos no item de maior valor (menos perceptível)
+      const sorted = [...restoredItems].sort((a, b) => b.valor - a.valor);
+      const step = diff > 0 ? 1 : -1;
+      let remaining = Math.abs(diff);
+      for (let i = 0; i < sorted.length && remaining > 0; i++) {
+        sorted[i].valor = Math.round((sorted[i].valor + step * 0.01) * 100) / 100;
+        remaining--;
+      }
+    }
 
     return { items: restoredItems, totalOriginal };
   }
