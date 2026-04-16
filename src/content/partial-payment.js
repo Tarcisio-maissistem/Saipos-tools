@@ -509,64 +509,71 @@
     }
   }
 
-  // Restaura valores originais dos itens (SAIPOS frac. proporcional após pagamento)
-  // v6.6.3 — detecta se itens já são originais (API) vs fracionados (scope/DOM)
+  // v6.6.4 — Restaura valores originais dos itens
+  // Estratégia: usa valorUnit (preço unitário original do SAIPOS) quando disponível
+  // O SAIPOS fraciona qtd/total após pagamento parcial, mas sale_price NÃO muda
   function restoreOriginalValues(items, totalGeral, totalPago) {
     if (totalPago <= 0 || totalGeral <= 0) return { items, totalOriginal: totalGeral };
 
     const totalOriginal = totalGeral + totalPago;
-
-    // Detecta se itens já têm valores originais (ex: vindos da API REST)
-    // Se soma dos itens ≈ totalOriginal, não aplica ratio
     const somaItens = items.reduce((s, i) => s + (i.valor || 0), 0);
-    if (Math.abs(somaItens - totalOriginal) < 0.50) {
-      return { items, totalOriginal };
+
+    // Detecção 1: soma dos itens ≈ totalOriginal → itens já são originais
+    if (Math.abs(somaItens - totalOriginal) < 1.00) {
+      // Recalcula valores com valorUnit se disponível (garante consistência)
+      const fixed = items.map(i => ({
+        ...i,
+        qtd: Math.abs(i.qtd - Math.round(i.qtd)) < 0.01 ? Math.round(i.qtd) : i.qtd,
+        valor: (i.valorUnit > 0)
+          ? Math.round(i.qtd * i.valorUnit * 100) / 100
+          : i.valor
+      }));
+      return { items: fixed, totalOriginal };
     }
 
+    // Detecção 2: todos têm valorUnit E todos com qtd inteira → originais
+    const allUnitPrice = items.every(i => i.valorUnit && i.valorUnit > 0);
+    const allIntQtd = items.every(i => Math.abs(i.qtd - Math.round(i.qtd)) < 0.01);
+    if (allUnitPrice && allIntQtd) {
+      const fixed = items.map(i => ({
+        ...i,
+        qtd: Math.round(i.qtd),
+        valor: Math.round(Math.round(i.qtd) * i.valorUnit * 100) / 100
+      }));
+      const somaFixed = fixed.reduce((s, i) => s + i.valor, 0);
+      return { items: fixed, totalOriginal: somaFixed };
+    }
+
+    // Itens fracionados — restaura via ratio
     const ratio = totalOriginal / totalGeral;
 
-    // Itens fracionados — restaura quantidades e valores via ratio
     const restoredItems = items.map(item => {
-      // Restaura quantidade
       let qtd = item.qtd * ratio;
       if (Math.abs(qtd - Math.round(qtd)) < 0.08) qtd = Math.round(qtd);
       else qtd = Math.round(qtd * 100) / 100;
 
       let valor;
       if (item.valorUnit && item.valorUnit > 0) {
-        // Preço unitário original disponível (scope ou API) — cálculo exato
+        // Preço unitário original — cálculo exato
         valor = Math.round(qtd * item.valorUnit * 100) / 100;
       } else {
-        // Fallback DOM: sem preço unitário, usa ratio (pode ter ±1 centavo)
+        // DOM fallback — ratio no valor total
         valor = Math.round(item.valor * ratio * 100) / 100;
       }
 
       return { ...item, qtd, valor };
     });
 
-    // Correção de centavos via largest-remainder method
+    // Correção de centavos via largest-remainder
     const totalCents = Math.round(totalOriginal * 100);
-    const rawCents = restoredItems.map(i => i.valor * 100);
-    const floorCents = rawCents.map(c => Math.floor(c));
-    const remainders = rawCents.map((c, i) => c - floorCents[i]);
-
-    let floorSum = floorCents.reduce((s, c) => s + c, 0);
-    let toDistribute = totalCents - floorSum;
-
-    if (toDistribute !== 0 && Math.abs(toDistribute) <= restoredItems.length * 2) {
-      const indices = remainders.map((r, i) => i);
-      if (toDistribute > 0) {
-        indices.sort((a, b) => remainders[b] - remainders[a]);
-      } else {
-        indices.sort((a, b) => remainders[a] - remainders[b]);
-      }
-
-      const step = toDistribute > 0 ? 1 : -1;
-      let remaining = Math.abs(toDistribute);
-      for (const idx of indices) {
-        if (remaining <= 0) break;
-        restoredItems[idx].valor = Math.round((restoredItems[idx].valor + step * 0.01) * 100) / 100;
-        remaining--;
+    const sumCents = restoredItems.reduce((s, i) => s + Math.round(i.valor * 100), 0);
+    let diff = totalCents - sumCents;
+    if (diff !== 0 && Math.abs(diff) <= restoredItems.length * 2) {
+      const sorted = [...restoredItems].sort((a, b) => b.valor - a.valor);
+      const step = diff > 0 ? 1 : -1;
+      for (let i = 0; Math.abs(diff) > 0 && i < sorted.length; i++) {
+        sorted[i].valor = Math.round((sorted[i].valor + step * 0.01) * 100) / 100;
+        diff -= step;
       }
     }
 
