@@ -510,16 +510,24 @@
   }
 
   // Restaura valores originais dos itens (SAIPOS frac. proporcional após pagamento)
-  // v6.6.2 — usa valorUnit (preço unitário original) quando disponível
+  // v6.6.3 — detecta se itens já são originais (API) vs fracionados (scope/DOM)
   function restoreOriginalValues(items, totalGeral, totalPago) {
     if (totalPago <= 0 || totalGeral <= 0) return { items, totalOriginal: totalGeral };
 
     const totalOriginal = totalGeral + totalPago;
+
+    // Detecta se itens já têm valores originais (ex: vindos da API REST)
+    // Se soma dos itens ≈ totalOriginal, não aplica ratio
+    const somaItens = items.reduce((s, i) => s + (i.valor || 0), 0);
+    if (Math.abs(somaItens - totalOriginal) < 0.50) {
+      return { items, totalOriginal };
+    }
+
     const ratio = totalOriginal / totalGeral;
 
-    // Passo 1: restaurar quantidades e valores
+    // Itens fracionados — restaura quantidades e valores via ratio
     const restoredItems = items.map(item => {
-      // Restaura quantidade via ratio
+      // Restaura quantidade
       let qtd = item.qtd * ratio;
       if (Math.abs(qtd - Math.round(qtd)) < 0.08) qtd = Math.round(qtd);
       else qtd = Math.round(qtd * 100) / 100;
@@ -536,8 +544,7 @@
       return { ...item, qtd, valor };
     });
 
-    // Passo 2: correção de centavos via largest-remainder method
-    // Garante que a soma dos itens = totalOriginal exatamente
+    // Correção de centavos via largest-remainder method
     const totalCents = Math.round(totalOriginal * 100);
     const rawCents = restoredItems.map(i => i.valor * 100);
     const floorCents = rawCents.map(c => Math.floor(c));
@@ -547,7 +554,6 @@
     let toDistribute = totalCents - floorSum;
 
     if (toDistribute !== 0 && Math.abs(toDistribute) <= restoredItems.length * 2) {
-      // Ordena por menor resto (distribui nos que mais precisam de ajuste)
       const indices = remainders.map((r, i) => i);
       if (toDistribute > 0) {
         indices.sort((a, b) => remainders[b] - remainders[a]);
