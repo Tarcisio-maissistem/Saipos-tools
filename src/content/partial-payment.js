@@ -93,9 +93,42 @@
       garcom = txt.replace(/Garçom:\s*/i, '').trim();
     }
 
+    // v6.6.0 — fallback: busca mesa/comanda em textos visíveis do DOM
+    let mesaText = mesa ? mesa.textContent.trim() : '';
+    let comandaText = comanda ? comanda.textContent.trim() : '';
+
+    if (!mesaText || !comandaText) {
+      // Tenta buscar via ng-bind ou outros seletores presentes na tela de close
+      const allSpans = document.querySelectorAll('span, div, td, strong, b');
+      for (const el of allSpans) {
+        const txt = (el.textContent || '').trim();
+        // Padrão "Mesa: 01" ou "MESA 01"
+        if (!mesaText) {
+          const mesaMatch = txt.match(/^Mesa[:\s]+(.+)/i);
+          if (mesaMatch && mesaMatch[1].trim().length < 30) mesaText = mesaMatch[1].trim();
+        }
+        // Padrão "Comanda: 001" ou "Comanda 001"
+        if (!comandaText) {
+          const cmdMatch = txt.match(/^Comanda[:\s]+(.+)/i);
+          if (cmdMatch && cmdMatch[1].trim().length < 30) comandaText = cmdMatch[1].trim();
+        }
+        if (mesaText && comandaText) break;
+      }
+    }
+
+    // v6.6.0 — fallback extra: busca por ng-bind que contenha mesa/comanda
+    if (!mesaText) {
+      const ngMesa = document.querySelector('[ng-bind*="table_desc"], [ng-bind*="desc_table"], [ng-bind*="table"]');
+      if (ngMesa) mesaText = ngMesa.textContent.trim();
+    }
+    if (!comandaText) {
+      const ngCmd = document.querySelector('[ng-bind*="command_order"], [ng-bind*="comanda"]');
+      if (ngCmd) comandaText = ngCmd.textContent.trim();
+    }
+
     return {
-      comanda: comanda ? comanda.textContent.trim() : '',
-      mesa: mesa ? mesa.textContent.trim() : '',
+      comanda: comandaText,
+      mesa: mesaText,
       garcom,
       identificacao: ident ? ident.value.trim() : ''
     };
@@ -294,6 +327,26 @@
   // Retorna nome da loja SEM o [id] no final
   function cleanStoreName(name) {
     return name.replace(/\s*\[\d+\]\s*$/, '').trim();
+  }
+
+  // v6.6.0 — fetch genérico via proxy do interceptor (MAIN world)
+  function fetchJson(url) {
+    const reqId = 'fj_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => resolve(null), 5000);
+      const handler = (e) => {
+        clearTimeout(timeout);
+        window.removeEventListener('__saipos_fetch_resp_' + reqId, handler);
+        try {
+          const resp = JSON.parse(e.detail);
+          resolve(resp?.data || null);
+        } catch (err) { resolve(null); }
+      };
+      window.addEventListener('__saipos_fetch_resp_' + reqId, handler);
+      window.dispatchEvent(new CustomEvent('__saipos_fetch_request', {
+        detail: { id: reqId, url, method: 'GET' }
+      }));
+    });
   }
 
   async function fetchStoreInfo(storeId) {
@@ -1009,6 +1062,19 @@
       payments,
       _idUser: idUser || 0
     };
+
+    // v6.6.0 — fallback API: busca mesa/comanda se ainda vazio
+    if ((!data.mesa || !data.comanda) && storeId && saleId) {
+      try {
+        const saleUrl = `https://api.saipos.com/v1/stores/${storeId}/sales/${saleId}`;
+        const s = await fetchJson(saleUrl);
+        if (s) {
+          if (!data.mesa) data.mesa = s.table_desc || s.desc_table || s.table || '';
+          if (!data.comanda) data.comanda = s.command_order || s.id_command_order || String(s.command_number || '');
+          if (!data.garcom) data.garcom = s.waiter_name || s.desc_waiter || '';
+        }
+      } catch(e) {}
+    }
 
     const storeInfo = storeId
       ? await fetchStoreInfo(storeId)

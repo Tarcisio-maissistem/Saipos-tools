@@ -220,9 +220,9 @@
         var result = {
           id_sale: sale.id_sale || sale.id,
           sale_items: [],
-          mesa: sale.table_desc || sale.desc_table || '',
-          comanda: sale.command_order || sale.id_command_order || '',
-          garcom: sale.waiter_name || sale.desc_waiter || '',
+          mesa: sale.table_desc || sale.desc_table || sale.table || sale.mesa || '',
+          comanda: sale.command_order || sale.id_command_order || sale.comanda || String(sale.command_number || ''),
+          garcom: sale.waiter_name || sale.desc_waiter || sale.garcom || '',
           identificacao: sale.desc_sale || '',
           total: sale.total_price || sale.total || 0,
           payments: []
