@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Saipos Tools",
-  "version": "4.8.0",
+  "version": "6.4.1",
   "description": "Extrai dados de vendas via API REST, calcula comissões por garçom e gera relatório.",
-  "permissions": ["activeTab", "scripting", "downloads", "storage"],
+  "permissions": ["activeTab", "scripting", "downloads", "storage", "sidePanel"],
   "host_permissions": [
     "https://conta.saipos.com/*",
     "https://*.saipos.com/*"
@@ -13,8 +13,11 @@
     "48": "icon48.png",
     "128": "icon128.png"
   },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
   "action": {
-    "default_popup": "popup.html",
+    "default_title": "Abrir Painel",
     "default_icon": {
       "16": "icon16.png",
       "48": "icon48.png"
@@ -30,6 +33,11 @@
     {
       "matches": ["https://conta.saipos.com/*"],
       "js": ["src/content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://conta.saipos.com/*"],
+      "js": ["src/partial-payment.js"],
       "run_at": "document_idle"
     }
   ],

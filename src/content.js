@@ -362,22 +362,29 @@
     let canceled = false;
     const canceledField = getField(raw, saleMap, 'canceled', null);
     if (canceledField !== null) {
-      canceled = Boolean(canceledField);
+      const v = String(canceledField).toLowerCase();
+      if (v !== 'null' && v !== '' && v !== '0' && v !== 'false') canceled = true;
     }
     if (!canceled) {
       let statusVal = getField(raw, saleMap, 'status', '');
-      // sale_status pode ser um sub-objeto { id_sale_status: N, desc_sale_status: "..." }
       if (statusVal && typeof statusVal === 'object') {
         const desc = statusVal.desc_sale_status || statusVal.desc || statusVal.description || statusVal.name || '';
-        const idSt = statusVal.id_sale_status ?? statusVal.id ?? null;
-        canceled = String(desc).toLowerCase().includes('cancel') || idSt === 3;
+        canceled = String(desc).toLowerCase().includes('cancel');
       } else {
         canceled = String(statusVal).toLowerCase().includes('cancel');
       }
     }
-    // Verifica também id_sale_status diretamente no raw
-    if (!canceled && raw.id_sale_status !== undefined) {
-      canceled = raw.id_sale_status === 3;
+    // Hard fallback: verifica chaves explícitas de cancelamento no objeto base
+    if (!canceled) {
+      const cKeys = ['canceled', 'date_canceled', 'canceled_at', 'data_cancelamento', 'deleted_at', 'is_canceled', 'is_deleted', 'cancelado'];
+      for (const ck of cKeys) {
+        if (raw[ck] !== undefined && raw[ck] !== null) {
+          const val = String(raw[ck]).toLowerCase();
+          if (val !== 'null' && val !== '' && val !== '0' && val !== 'false' && val !== 'n') {
+            canceled = true; break;
+          }
+        }
+      }
     }
 
     const inlineItems = getField(raw, saleMap, 'items', null);
@@ -1061,6 +1068,42 @@
                 }
                 if (!sale.mesa) sale.mesa = unwrapField(detail.table_number || detail.desc_table || '');
                 if (!sale.comanda) sale.comanda = unwrapField(detail.sale_number || detail.order_card || detail.number_order_card || '');
+
+                // Secundary Canceled check using detail object
+                let detCanceled = false;
+                const detStatusStr = String(detail.desc_sale_status || detail.status || detail.situacao || '').toLowerCase();
+                if (detStatusStr.includes('cancel')) {
+                  detCanceled = true;
+                } else if (detail.id_sale_status !== undefined && [3, 4, 5].includes(detail.id_sale_status) && !detStatusStr.match(/conclu|entreg|pag|pronto/)) {
+                  detCanceled = true;
+                } else {
+                  const cKeys = ['canceled', 'date_canceled', 'canceled_at', 'data_cancelamento', 'deleted_at', 'is_canceled', 'is_deleted', 'cancelado'];
+                  for (const ck of cKeys) {
+                    if (detail[ck] !== undefined && detail[ck] !== null) {
+                      const val = String(detail[ck]).toLowerCase();
+                      if (val !== 'null' && val !== '' && val !== '0' && val !== 'false' && val !== 'n') {
+                        detCanceled = true; break;
+                      }
+                    }
+                  }
+                }
+                if (detCanceled) {
+                  sale.canceled = true;
+                  debug(`Venda detalhe detectada como cancelada (id: ${sale._rawId})`);
+                }
+
+                // DUMP DIAGNÓSTICO PARA A COMANDA C2921028
+                if (String(sale.comanda).includes('2921028')) {
+                  const safeLog = Object.keys(detail)
+                    .filter(k => k.includes('status') || k.includes('cancel') || k.includes('delete') || k.includes('state'))
+                    .map(k => `${k}=${detail[k]}`).join(', ');
+                  log(`🔍 DIAGNÓSTICO C2921028 (Detalhe): ${safeLog}`, 'warn');
+                  
+                  const rootLog = Object.keys(sale._rawParams || {})
+                    .filter(k => k.includes('status') || k.includes('cancel') || k.includes('delete') || k.includes('state'))
+                    .map(k => `${k}=${(sale._rawParams||{})[k]}`).join(', ');
+                  log(`🔍 DIAGNÓSTICO C2921028 (Root): ${rootLog}`, 'warn');
+                }
               }
 
               const rawItems = extractItemsFromDetail(detail);
@@ -1097,19 +1140,19 @@
         delete sale._rawItems;
       }
 
-      // Filtra vendas canceladas
+      // Filtra vendas canceladas para log, mas agora exportamos TODAS para o relatorio exibir as canceladas
       const activeSales = mappedSales.filter(s => !s.canceled);
       const canceledCount = mappedSales.length - activeSales.length;
       if (canceledCount > 0) {
-        log(canceledCount + ' venda(s) cancelada(s) ignorada(s)');
+        log(canceledCount + ' venda(s) cancelada(s) detectada(s)');
       }
 
-      EXT.sales = activeSales;
+      EXT.sales = mappedSales;
       EXT.running = false;
 
       const ok = activeSales.filter(s => s.items && s.items.length > 0).length;
-      log('Concluído! ' + activeSales.length + ' vendas (' + ok + ' com itens)' + (canceledCount > 0 ? ' — ' + canceledCount + ' canceladas ignoradas' : ''));
-      emit('DONE', { sales: activeSales, dateRange: _dateRange });
+      log('Concluído! ' + activeSales.length + ' vendas ativas (' + ok + ' com itens)' + (canceledCount > 0 ? ' — ' + canceledCount + ' canceladas' : ''));
+      emit('DONE', { sales: mappedSales, dateRange: _dateRange });
 
     } catch (e) {
       log('ERRO: ' + e.message, 'error');
@@ -1415,6 +1458,183 @@
           sendResponse({ success: true, products });
         } catch(err) {
           sendResponse({ error: err.message });
+        }
+      })();
+      return true;
+    }
+    if (msg.action === 'IMPORT_CSV') {
+      (async () => {
+        try {
+          let storeId = getStoreIdFromUrl();
+          if (!storeId) {
+            await getCapturedCalls();
+            storeId = getStoreIdFromUrl();
+          }
+          if (!storeId) return sendResponse({ error: 'Navegue no catálogo Saipos primeiro para a extensão capturar sua loja.' });
+          
+          if (!_authHeaders) {
+            const h = await getAuthHeaders();
+            if (!h) return sendResponse({ error: 'Headers não encontrados! Faça login no Saipos e recarregue a página.' });
+          }
+
+          sendResponse({ started: true });
+
+          const rows = msg.rows;
+          let successCount = 0;
+          let errCount = 0;
+
+          emit('CSV_LOG', { text: `⏳ Iniciando importação de ${rows.length} produtos... Buscando chaves da loja...` });
+          
+          let defaultCategoryId = null;
+          let storeCategories = [];
+          try {
+            const tUrl = `https://api.saipos.com/v1/stores/${storeId}/items?filter=` + encodeURIComponent(JSON.stringify({ limit: 1 }));
+            const tRes = await mainWorldFetch(tUrl);
+            const tList = tRes?.data?.rows || tRes?.data || [];
+            if (tList.length > 0) defaultCategoryId = tList[0].id_store_category_item;
+
+            const catUrl = `https://api.saipos.com/v1/stores/${storeId}/category_items?filter=` + encodeURIComponent(JSON.stringify({ limit: 2000 }));
+            const catRes = await mainWorldFetch(catUrl);
+            storeCategories = catRes?.data?.rows || catRes?.data || [];
+          } catch (e) {
+            console.error("Falha ao buscar chaves iniciais", e);
+          }
+
+          let defaultVariationId = null;
+          let defaultVariationObj = null;
+          try {
+            const vUrl = `https://api.saipos.com/v1/stores/${storeId}/variations?filter=` + encodeURIComponent(JSON.stringify({ limit: 100 }));
+            const vRes = await mainWorldFetch(vUrl);
+            const varList = vRes?.data?.rows || vRes?.data || [];
+            // Procuramos uma variação declarada "Única" na loja para evitar "Preço Variável"
+            let unica = varList.find(v => v.is_unique === "Y" || v.desc_store_variation.toLowerCase().includes("únic"));
+            if (!unica && varList.length > 0) unica = varList[0];
+            
+            if (unica) {
+              defaultVariationId = unica.id_store_variation || unica.id;
+              defaultVariationObj = unica;
+            }
+          } catch(e) {
+             console.error("Falha ao buscar variações genéricas", e);
+          }
+
+          emit('CSV_LOG', { text: `⏳ Preparando importação de ${rows.length} produtos... (Pausa anti-ban 700ms ativada)` });
+
+          for (let i = 0; i < rows.length; i++) {
+            const cols = rows[i].split(',');
+            if (cols.length < 2) continue;
+
+            const p_nome      = cols[0]?.trim() || '';
+            const p_valor     = parseFloat(cols[1]?.trim());
+            const p_categoria = cols[2]?.trim() || '';
+            const p_descricao = cols[3]?.trim() || '';
+            const p_pesado    = cols[4]?.trim().toUpperCase() === 'S' ? 'Y' : 'N';
+            const p_taxa      = (cols[5] && cols[5].trim().toUpperCase() === 'N') ? 'N' : 'Y';
+            
+            let finalCategoryId = defaultCategoryId;
+
+            if (p_categoria && p_categoria.toLowerCase() !== 'sem categoria') {
+              let catMatch = storeCategories.find(c => c.desc_category && c.desc_category.toLowerCase() === p_categoria.toLowerCase());
+              if (catMatch) {
+                finalCategoryId = catMatch.id_store_category_item || catMatch.id;
+              } else {
+                // Cadastrar nova categoria se não existir
+                try {
+                  const newCat = {
+                    desc_category: p_categoria,
+                    enabled: "Y",
+                    online_order: "Y",
+                    digital_menu: "Y",
+                    print_type: 1,
+                    order: 1
+                  };
+                  const cRes = await mainWorldFetch(`https://api.saipos.com/v1/stores/${storeId}/category_items`, 'POST', newCat);
+                  if (cRes && !cRes.error && cRes.data) {
+                    finalCategoryId = cRes.data.id_store_category_item || cRes.data.id;
+                    storeCategories.push({
+                      desc_category: p_categoria,
+                      id_store_category_item: finalCategoryId
+                    });
+                    emit('CSV_LOG', { text: `✅ Categoria "${p_categoria}" auto-criada.` });
+                  }
+                } catch(e) {
+                  console.error("Falha ao criar categoria", e);
+                }
+              }
+            }
+
+            // Required valid payload structure for SAIPOS POST /items
+            const payload = {
+              "id_store": parseInt(storeId),
+              "id_store_item": 0,
+              "item_type": "other",
+              "id_store_category_item": finalCategoryId,
+              "id_store_taxes_data": null,
+              "desc_store_item": p_nome,
+              "desc_store_item_delivery": null,
+              "detail": p_descricao,
+              "enabled": "Y",
+              "identifier_number": null,
+              "available_delivery": "Y",
+              "available_site_delivery": "Y",
+              "available_digital_menu": "Y",
+              "available_table_order": "Y",
+              "available_totem": "Y",
+              "print_type": 1,
+              "generic_use": "N",
+              "service_charge": p_taxa,
+              "decimal_quantity": p_pesado,
+              "order": 1,
+              "variations": [
+                {
+                  "id_store_item_variation": 0,
+                  "id_store_item": 0,
+                  "id_store_variation": defaultVariationId,
+                  "price": isNaN(p_valor) ? 0 : p_valor,
+                  "order": 0,
+                  "enabled": "Y",
+                  "dietary_restrictions": "",
+                  "variation": defaultVariationObj || undefined,
+                  "ingredients": [],
+                  "promotions": [],
+                  "cmv_simulation": [],
+                  "ingredient_portion_variation": []
+                }
+              ],
+              "categories": [],
+              "choices": [],
+              "availability": [],
+              "production_owner": "P",
+              "cod_gtin": null
+            };
+
+            try {
+                // mainWorldFetch was implemented correctly in content.js and bypasses CORS / isolated world issues
+                const url = `https://api.saipos.com/v1/stores/${storeId}/items`;
+                const res = await mainWorldFetch(url, 'POST', payload);
+
+                if (res && res.error) {
+                    errCount++;
+                    console.error(`❌ Falha ao inserir "${p_nome}":`, res.error);
+                } else {
+                    successCount++;
+                }
+            } catch (err) {
+                errCount++;
+                console.error(`❌ Erro de rede em "${p_nome}":`, err);
+            }
+
+            emit('CSV_LOG', { text: `⏳ Importando: ${i + 1}/${rows.length}...` });
+
+            // Pausa de 700ms entre requisições — essencial para não acionar o WAF
+            await sleep(700);
+          }
+
+          emit('CSV_LOG', { text: `✅ <b>Finalizado!</b><br/>Inseridos: ${successCount} | Erros: ${errCount}.<br/><i>Atualizando página do Saipos em 2s...</i>` });
+          setTimeout(() => window.location.reload(), 2000);
+
+        } catch(err) {
+          emit('CSV_LOG', { text: `❌ Erro fatal: ${err.message}` });
         }
       })();
       return true;

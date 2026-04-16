@@ -32,15 +32,18 @@ function setProgress(cur, tot) {
 }
 
 function addLog(entry) {
-  const panel = $('panel-log');
-  const empty = panel.querySelector('.empty');
+  const container = $('log-content');
+  if (!container) return;
+  const empty = container.querySelector('.empty');
   if (empty) empty.remove();
 
   const div = document.createElement('div');
   div.className = `log-line ${entry.type || ''}`;
   div.innerHTML = `<span class="ll-time">${entry.time}</span><span class="ll-msg">${entry.msg}</span>`;
-  panel.appendChild(div);
-  panel.scrollTop = panel.scrollHeight;
+  container.appendChild(div);
+  
+  const panel = $('panel-log');
+  if (panel) panel.scrollTop = panel.scrollHeight;
 }
 
 function setButtons(running) {
@@ -105,9 +108,8 @@ $('bStart').addEventListener('click', async () => {
   if (!ok) return;
 
   allSales = [];
-  $('panel-log').innerHTML = '';
-  $('panel-resumo').innerHTML = '<div class="empty"><big>👤</big>Processando...</div>';
-  $('panel-alertas').innerHTML = '<div class="empty"><big>⚠️</big>Processando...</div>';
+  $('log-content').innerHTML = '';
+  $('resumo-content').innerHTML = '<div class="empty"><big>👤</big>Processando...</div>';
 
   isRunning = true;
   isPaused  = false;
@@ -140,6 +142,12 @@ $('bStop').addEventListener('click', async () => {
   setButtons(false);
   // Atualiza status no background
   chrome.runtime.sendMessage({ type: 'STATUS', status: 'stopped' }).catch(() => {});
+});
+
+// ── LIMPAR LOG ───────────────────────────────────────────────
+$('btnClearLog').addEventListener('click', () => {
+  const lc = $('log-content');
+  if (lc) lc.innerHTML = '<div class="empty"><big>🤖</big>Log limpo.</div>';
 });
 
 // ── RELATÓRIO ────────────────────────────────────────────────
@@ -198,7 +206,6 @@ chrome.runtime.onMessage.addListener(msg => {
     setStatus('done', `✅ ${allSales.length} vendas concluídas`);
     setButtons(false);
     renderResumo(allSales);
-    renderAlertas(allSales);
     addLog({ msg: `🎉 Pronto! ${allSales.length} vendas · abrindo relatório...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
     
     // Abre relatório automaticamente
@@ -227,7 +234,7 @@ function renderResumo(sales) {
     }
   }
 
-  const panel = $('panel-resumo');
+  const panel = $('resumo-content');
   if (Object.keys(garcom).length === 0) {
     panel.innerHTML = '<div class="empty"><big>👤</big>Sem dados.</div>';
     return;
@@ -314,7 +321,7 @@ async function restoreState() {
 
     // Restaura logs
     if (state.logs && state.logs.length > 0) {
-      $('panel-log').innerHTML = '';
+      $('log-content').innerHTML = '';
       for (const entry of state.logs) {
         addLog(entry);
       }
@@ -349,6 +356,59 @@ async function restoreState() {
     console.log('[Popup] Sem estado para restaurar');
   }
 }
+
+// ── CSV Import Logic ─────────────────────────────────────────
+$('btnProcessCsv').addEventListener('click', async () => {
+    const textInput = $('csvTextInputSaipos');
+    const logStatus = $('csvLogStatus');
+    const text = textInput.value.trim();
+
+    if (!text) {
+        logStatus.innerText = '❌ Cole o conteúdo do CSV primeiro!';
+        return;
+    }
+
+    logStatus.innerText = '🔄 Processando texto...';
+
+    const rows = text.split('\n').filter(row => row.trim().length > 0);
+    
+    // Se a primeira linha tiver cabeçalho (ex: nome,valor), removemos
+    if (rows[0].toLowerCase().includes('nome') || rows[0].toLowerCase().includes('valor')) {
+        rows.shift();
+    }
+
+    if (rows.length === 0) {
+        logStatus.innerText = '❌ Nenhuma linha de dados encontrada!';
+        return;
+    }
+
+    logStatus.innerText = '🔄 Solicitando importação à extensão...';
+    
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) {
+            logStatus.innerText = '❌ Aba do Saipos não encontrada!';
+            return;
+        }
+        
+        const res = await chrome.tabs.sendMessage(tab.id, { action: 'IMPORT_CSV', rows });
+        if (res && res.error) {
+            logStatus.innerText = '❌ ' + res.error;
+        } else if (res && res.started) {
+            $('csvTextInputSaipos').value = '';
+        }
+    } catch(err) {
+        logStatus.innerText = '❌ Erro de comunicação com a página: recarregue a página do Saipos.';
+    }
+});
+
+// O content.js avisa o log de CSV
+chrome.runtime.onMessage.addListener(msg => {
+    if (msg.type === 'CSV_LOG') {
+        const logStatus = $('csvLogStatus');
+        if (logStatus) logStatus.innerHTML = msg.text;
+    }
+});
 
 // ── Happy Hour Promo Logic ───────────────────────────────
 let hhPromos = [];
@@ -481,6 +541,23 @@ async function loadPromos() {
   hhPromos = res.saipos_happyhour || [];
   renderPromos();
 }
+
+document.addEventListener('DOMContentLoaded', async () => {
+  // Configura a versão dinamicamente pelo manifest
+  const manifest = chrome.runtime.getManifest();
+  const vSpan = document.getElementById('app-version');
+  if (vSpan && manifest && manifest.version) vSpan.textContent = 'v' + manifest.version;
+
+  const res = await chrome.storage.local.get(['saipos_status']);
+  if (res.saipos_status) {
+    isRunning = res.saipos_status.running;
+    if (res.saipos_status.sales) allSales = res.saipos_status.sales;
+  }
+  
+  const res2 = await chrome.storage.local.get('saipos_happyhour');
+  hhPromos = res2.saipos_happyhour || [];
+  renderPromos();
+});
 
 const DAYS_SHORT = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
 

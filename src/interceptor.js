@@ -203,6 +203,74 @@
     fire('__saipos_auth', { headers: auth });
   });
 
+  // Retorna itens originais da venda via Angular scope (vm.sale)
+  window.addEventListener('__saipos_get_sale_items', function() {
+    try {
+      // Busca o scope Angular do controller da tela de close
+      var els = document.querySelectorAll('[ng-controller]');
+      var scope = null;
+      for (var i = 0; i < els.length; i++) {
+        var s = angular.element(els[i]).scope();
+        while (s && !s.vm) s = s.$parent;
+        if (s && s.vm && s.vm.sale) { scope = s; break; }
+      }
+
+      if (scope && scope.vm && scope.vm.sale) {
+        var sale = scope.vm.sale;
+        var result = {
+          id_sale: sale.id_sale || sale.id,
+          sale_items: [],
+          mesa: sale.table_desc || sale.desc_table || '',
+          comanda: sale.command_order || sale.id_command_order || '',
+          garcom: sale.waiter_name || sale.desc_waiter || '',
+          identificacao: sale.desc_sale || '',
+          total: sale.total_price || sale.total || 0,
+          payments: []
+        };
+
+        // Itens originais
+        var items = sale.sale_items || sale.items || sale.saleItems || [];
+        for (var j = 0; j < items.length; j++) {
+          var it = items[j];
+          result.sale_items.push({
+            nome: it.desc_item || it.desc_sale_item || it.name || '',
+            qtd: it.quantity || it.qty || 1,
+            valor_unit: it.sale_price || it.unit_price || it.price || 0,
+            valor_total: it.total_price || it.total || 0
+          });
+        }
+
+        // Pagamentos
+        var payments = sale.payments || [];
+        for (var k = 0; k < payments.length; k++) {
+          var p = payments[k];
+          // Pagamento pode ter sub-array payments
+          var subPays = p.payments || [p];
+          for (var l = 0; l < subPays.length; l++) {
+            var sp = subPays[l];
+            result.payments.push({
+              forma: sp.desc_payment_type || sp.payment_type || '',
+              desc: sp.desc_sale_payment || p.desc_sale_payment || '',
+              valor: sp.value || sp.amount || sp.total || 0
+            });
+          }
+        }
+
+        console.log('[Saipos Interceptor] sale_items encontrados:', result.sale_items.length);
+        window.dispatchEvent(new CustomEvent('__saipos_sale_items_response', {
+          detail: JSON.stringify(result)
+        }));
+        return;
+      }
+    } catch(e) {
+      console.error('[Saipos Interceptor] Erro ao ler Angular scope:', e);
+    }
+
+    window.dispatchEvent(new CustomEvent('__saipos_sale_items_response', {
+      detail: JSON.stringify({ sale_items: [], payments: [] })
+    }));
+  });
+
   window.addEventListener('__saipos_get_calls', function() {
     var list = calls.map(function(c, i) {
       return {

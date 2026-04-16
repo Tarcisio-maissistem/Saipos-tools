@@ -20,8 +20,9 @@
   --p2: #0284c7;      /* Azul escuro para botões secundários */
   --r:8px
 }
-body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
-     font-family:'IBM Plex Sans',sans-serif;font-size:12px}
+body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
+     font-family:'IBM Plex Sans',sans-serif;font-size:12px;
+     display:flex;flex-direction:column;margin:0}
 
 /* ─── Header ─── */
 .hdr{padding:14px 16px 10px;display:flex;align-items:center;gap:12px;
@@ -58,9 +59,9 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
 #progLabel{font-size:10px;color:var(--muted);text-align:right}
 
 /* ─── Botões ─── */
-.btns{display:flex;gap:7px;padding:10px 14px;background:var(--bg);border-bottom:1px solid var(--bord)}
-.btn{flex:1;padding:8px 6px;border:none;border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;
-     font-size:11px;font-weight:700;cursor:pointer;transition:.15s;letter-spacing:.3px}
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--bord)}
+.btn{padding:10px 8px;border:none;border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;
+     font-size:11px;font-weight:700;cursor:pointer;transition:.15s;letter-spacing:.3px;text-align:center}
 .btn:active{transform:scale(.97)}
 .btn:disabled{opacity:.3;cursor:not-allowed;pointer-events:none}
 .b-start{background:var(--acc);color:#ffffff}
@@ -73,14 +74,17 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
 .b-report:hover{background:var(--acc);color:#ffffff}
 
 /* ─── Tabs ─── */
-.tabs{display:flex;border-bottom:1px solid var(--bord);background:var(--s1)}
-.tab{flex:1;padding:8px 4px;text-align:center;font-size:10px;text-transform:uppercase;
+.tabs{display:flex;overflow-x:auto;border-bottom:1px solid var(--bord);background:var(--s1);-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{height:4px}
+.tabs::-webkit-scrollbar-track{background:var(--bg)}
+.tabs::-webkit-scrollbar-thumb{background:var(--bord);border-radius:2px}
+.tab{flex:0 0 auto;padding:10px 14px;text-align:center;font-size:10px;text-transform:uppercase;
      letter-spacing:.5px;color:var(--muted);cursor:pointer;
-     border-bottom:2px solid transparent;transition:.15s}
+     border-bottom:3px solid transparent;transition:.15s}
 .tab.active{color:var(--acc);border-bottom-color:var(--acc)}
 
 /* ─── Painéis ─── */
-.panel{display:none;height:310px;overflow-y:auto}
+.panel{display:none;flex:1;overflow-y:auto;height:100%}
 .panel.active{display:block}
 .panel::-webkit-scrollbar{width:3px}
 .panel::-webkit-scrollbar-track{background:var(--bg)}
@@ -95,10 +99,10 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
 .log-line.warn  .ll-msg{color:var(--warn)}
 
 /* ─── Resumo ─── */
-.gc-row{padding:10px 14px;border-bottom:1px solid var(--bord)}
+.gc-row{padding:12px 16px;border-bottom:1px solid var(--bord)}
 .gc-name{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;
-         color:var(--acc);display:flex;justify-content:space-between;margin-bottom:4px}
-.gc-stats{display:flex;gap:14px;flex-wrap:wrap}
+         color:var(--acc);display:flex;justify-content:space-between;margin-bottom:6px}
+.gc-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .gc-stat span{display:block;font-size:9px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
 .gc-stat b{color:var(--txt);font-size:11px;font-family:'IBM Plex Mono',monospace}
 
@@ -122,7 +126,7 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
 .empty big{font-size:28px;display:block;margin-bottom:6px}
 
 /* ─── API Status ─── */
-.api-status{display:flex;align-items:center;gap:8px;padding:6px 14px;background:var(--s1);
+.api-status{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:10px 16px;background:var(--s1);
             border-bottom:1px solid var(--bord);font-size:10px}
 .api-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);flex-shrink:0}
 .api-dot.ok{background:var(--acc)}
@@ -135,10 +139,10 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
 .btn-test:hover{background:var(--s3);border-color:var(--acc)}
 
 /* ─── Happy Hour ─── */
-.hh-form{padding:16px;background:linear-gradient(135deg, rgba(0,163,255,.05), rgba(2,132,199,.05));border-bottom:1px solid var(--bord);
+.hh-form{padding:20px 16px;background:linear-gradient(135deg, rgba(0,163,255,.05), rgba(2,132,199,.05));border-bottom:1px solid var(--bord);
          backdrop-filter:blur(8px)}
-.hh-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
-.f-group{display:flex;flex-direction:column;gap:4px}
+.hh-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 10px;margin-bottom:14px}
+.f-group{display:flex;flex-direction:column;gap:6px}
 .f-group label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
 .f-inp{background:var(--s2);border:1px solid var(--bord);color:var(--txt);padding:8px 10px;border-radius:6px;font-size:12px;
        transition:border-color .2s, box-shadow .2s}
@@ -177,56 +181,58 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
   <div class="logo">O</div>
   <div class="hdr-text">
     <h1>Saipos Tools</h1>
-    <p>API Scraper · conta.saipos.com · v4.6.0</p>
+    <p>API Scraper · conta.saipos.com · <span id="app-version">v4.6.0</span></p>
   </div>
-</div>
-
-<div class="url-warn" id="urlWarn">
-  ⚠️ Acesse <b>conta.saipos.com/#/app/report/sales-by-period</b>, aplique o filtro de datas e clique em INICIAR.
-</div>
-
-<div class="status-row">
-  <div><span class="dot" id="dot"></span><span id="statusLabel">Aguardando...</span></div>
-  <span id="pctBadge"></span>
-</div>
-
-<div class="prog-wrap">
-  <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
-  <div id="progLabel">0 / 0 vendas</div>
-</div>
-
-<div class="api-status" id="apiStatus">
-  <span class="api-dot" id="apiDot"></span>
-  <span id="apiLabel">API: aguardando...</span>
-  <button class="btn-test" id="bTest">TESTAR API</button>
-</div>
-
-<div class="btns">
-  <button class="btn b-start"  id="bStart">▶ INICIAR</button>
-  <button class="btn b-pause"  id="bPause" disabled>⏸ PAUSAR</button>
-  <button class="btn b-stop"   id="bStop"  disabled>■ PARAR</button>
-  <button class="btn b-report" id="bReport" disabled>📄 RELATÓRIO</button>
 </div>
 
 <div class="tabs">
   <div class="tab active" data-tab="log">LOG</div>
-  <div class="tab" data-tab="resumo">GARÇONS</div>
-  <div class="tab" data-tab="alertas">ALERTAS</div>
+  <div class="tab" data-tab="resumo">COMISSÕES</div>
   <div class="tab" data-tab="happyhour">HAPPY HOUR</div>
-</div>
+  <div class="tab" data-tab="csv">CSV</div>
 </div>
 
 <div class="panel active" id="panel-log">
-  <div class="empty"><big>🤖</big>Clique em <b>INICIAR</b> para o robô começar.<br>
-  Certifique-se de ter o filtro de datas aplicado na página.</div>
+  <div style="display:flex;justify-content:flex-end;padding:8px 14px;border-bottom:1px solid var(--bord);background:var(--s1);position:sticky;top:0;z-index:9;">
+    <button class="btn btn-sm b-tgl" id="btnClearLog">🧹 Limpar Log</button>
+  </div>
+  <div id="log-content">
+    <div class="empty"><big>🤖</big>Bem-vindo ao Log Global.<br>
+    Acompanhe aqui o console de todas as ferramentas.</div>
+  </div>
 </div>
 
 <div class="panel" id="panel-resumo">
-  <div class="empty"><big>👤</big>Nenhum dado ainda.</div>
-</div>
+  <div class="url-warn" id="urlWarn">
+    ⚠️ Acesse <b>conta.saipos.com/#/app/report/sales-by-period</b>, aplique o filtro de datas e clique em INICIAR.
+  </div>
 
-<div class="panel" id="panel-alertas">
-  <div class="empty"><big>⚠️</big>Nenhum alerta ainda.</div>
+  <div class="status-row">
+    <div><span class="dot" id="dot"></span><span id="statusLabel">Aguardando...</span></div>
+    <span id="pctBadge"></span>
+  </div>
+
+  <div class="prog-wrap">
+    <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    <div id="progLabel">0 / 0 vendas</div>
+  </div>
+
+  <div class="api-status" id="apiStatus">
+    <span class="api-dot" id="apiDot"></span>
+    <span id="apiLabel">API: aguardando...</span>
+    <button class="btn-test" id="bTest">TESTAR API</button>
+  </div>
+
+  <div class="btns">
+    <button class="btn b-start"  id="bStart">▶ INICIAR</button>
+    <button class="btn b-pause"  id="bPause" disabled>⏸ PAUSAR</button>
+    <button class="btn b-stop"   id="bStop"  disabled>■ PARAR</button>
+    <button class="btn b-report" id="bReport" disabled>📄 RELATÓRIO</button>
+  </div>
+  
+  <div id="resumo-content">
+    <div class="empty"><big>👤</big>Nenhum dado ainda.</div>
+  </div>
 </div>
 
 <div class="panel" id="panel-happyhour">
@@ -278,6 +284,16 @@ body{width:480px;min-height:560px;background:var(--bg);color:var(--txt);
       <button id="btnHHImport" class="btn-sm b-tgl" style="flex:1" title="Restaura configurações de um arquivo salvo">📥 IMPORTAR BACKUP</button>
     </div>
     <input type="file" id="hhImportFile" style="display:none" accept=".json">
+  </div>
+</div>
+
+<div class="panel" id="panel-csv">
+  <div style="padding:16px; display:flex; flex-direction:column; height:100%;">
+      <b style="font-size:14px;color:var(--acc);">📥 Importar Produtos via CSV</b><br/>
+      <i style="color:var(--muted); font-size:11px;">Cole o conteúdo (colunas: nome, valor, categoria, descricao, pesado(S/N), taxa(S/N))</i><br/>
+      <textarea id="csvTextInputSaipos" placeholder="nome,valor,categoria,descricao,pesado,taxa_servico&#10;Brigadeiro,3.50,Doces,Sabores variados,N,S" style="flex:1; margin-top: 10px; width:100%; border: 1px solid var(--bord); padding: 8px; border-radius: 4px; font-family:'IBM Plex Mono', monospace; font-size: 11px; resize:none; background:var(--s2); color:var(--txt);"></textarea>
+      <button class="btn b-start" id="btnProcessCsv" style="width:100%; padding:10px; margin-top:10px; flex-shrink: 0;">Importar Lote</button>
+      <div id="csvLogStatus" style="font-size:12px; color:var(--warn); margin-top:10px; flex-shrink: 0;"></div>
   </div>
 </div>
 

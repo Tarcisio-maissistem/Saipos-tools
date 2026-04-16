@@ -850,9 +850,13 @@ function copiarTudo() {
     const taxaDia = vendas.filter(s => !s.canceled).reduce((a,s) => a + s.taxa, 0);
     const dayGarcom = {};
 
+    const activeVendas = vendas.filter(s => !s.canceled);
+    const canceladas = vendas.length - activeVendas.length;
+    const countStr = activeVendas.length + (canceladas > 0 ? ` (+${canceladas} canc)` : '');
+
     lines.push('');
     lines.push('┌──────────────────────────────────────────────────────────────────────┐');
-    lines.push('│  📅 ' + dia + '    |    Vendas: ' + vendas.length + '    |    Total: R$ ' + fmtVal(totalDia) + '    |    Taxa: R$ ' + fmtVal(taxaDia));
+    lines.push('│  📅 ' + dia + '    |    Vendas: ' + countStr.padEnd(16) + '|    Total: R$ ' + fmtVal(totalDia) + '    |    Taxa: R$ ' + fmtVal(taxaDia));
     lines.push('└──────────────────────────────────────────────────────────────────────┘');
 
     for (const sale of vendas) {
