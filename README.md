@@ -53,22 +53,18 @@ O preço altera automaticamente quando entra na janela de horário e volta ao no
 
 ## 🧾 3. Resumo da Conta (Impressão)
 
-Botão **"Resumo da Conta"** injetado na tela de fechamento de conta (`/table-order/close/`).
+Botão **"Resumo"** injetado na tela de fechamento de conta (`/table-order/close/`).
 
 ### Funcionalidades:
-- Exibe modal com **mesa, comanda, garçom** e itens da conta
+- Exibe modal com mesa, comanda, garçom, itens, quantidades e valores
 - Lê pagamentos já realizados (pagamento parcial)
 - Restaura valores originais (compensa o rateio proporcional do SAIPOS)
-- Calcula saldo restante (FALTA PAGAR / CONTA PAGA)
-- Cabeçalho centralizado com nome da loja, CNPJ e endereço
-- Gera arquivo `.saiposprt` para impressão via SAIPOS Printer
-- **Fix navegação**: botão voltar retorna à tela de edição em vez da tela principal
+- Calcula saldo restante
+- Gera arquivo `.saiposprt` com cabeçalho centralizado (loja, CNPJ, endereço)
+- Leitura de mesa/comanda com 4 camadas de fallback (Angular scope, DOM data-qa, texto visível, API REST)
+- Botão voltar corrigido: retorna à tela de edição em vez da tela principal
 
-### Leitura de dados (4 camadas de fallback):
-1. Angular scope (`vm.sale`)
-2. Seletores DOM `data-qa`
-3. Busca por texto visível no DOM
-4. API REST `GET /sales/{saleId}`
+![Resumo da Conta](images/resumo-conta.png)
 
 ---
 
@@ -83,14 +79,9 @@ Brigadeiro,3.50,Doces,Sabores variados,N,S
 ```
 
 - **Colunas**: nome, valor, categoria, descrição, pesado (S/N), taxa de serviço (S/N)
-- Categorias são criadas automaticamente se não existirem
+- Categorias são criadas automaticamente se não existirem na loja
 - Clique em **Importar Lote** para processar
-
-### Desfazer importação:
-- Após importar, o botão **"↩️ Desfazer Última Importação"** aparece automaticamente
-- Mostra data e quantidade de produtos importados
-- Pede confirmação antes de deletar os produtos da SAIPOS
-- Remove todos os produtos criados na última importação via API
+- **↩️ Desfazer Última Importação**: remove todos os produtos criados (com confirmação)
 
 ---
 
@@ -100,6 +91,7 @@ Brigadeiro,3.50,Doces,Sabores variados,N,S
 Saipos Tools/
 ├── manifest.json
 ├── icons/             # Ícones da extensão
+├── images/            # Screenshots para documentação
 ├── pages/             # HTMLs de interface
 │   ├── popup.html
 │   └── report.html
