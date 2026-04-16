@@ -1,4 +1,4 @@
-# Saipos Tools v6.5.1
+# Saipos Tools v6.6.0
 
 Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Happy Hour Automático**, **Resumo da Conta com Impressão** e **Importação de Produtos**.
 
@@ -53,14 +53,22 @@ O preço altera automaticamente quando entra na janela de horário e volta ao no
 
 ## 🧾 3. Resumo da Conta (Impressão)
 
-Botão **"Resumo"** injetado na tela de fechamento de conta (`/table-order/close/`).
+Botão **"Resumo da Conta"** injetado na tela de fechamento de conta (`/table-order/close/`).
 
 ### Funcionalidades:
-- Exibe modal com itens, quantidades e valores da mesa
+- Exibe modal com **mesa, comanda, garçom** e itens da conta
 - Lê pagamentos já realizados (pagamento parcial)
 - Restaura valores originais (compensa o rateio proporcional do SAIPOS)
-- Calcula saldo restante
+- Calcula saldo restante (FALTA PAGAR / CONTA PAGA)
+- Cabeçalho centralizado com nome da loja, CNPJ e endereço
 - Gera arquivo `.saiposprt` para impressão via SAIPOS Printer
+- **Fix navegação**: botão voltar retorna à tela de edição em vez da tela principal
+
+### Leitura de dados (4 camadas de fallback):
+1. Angular scope (`vm.sale`)
+2. Seletores DOM `data-qa`
+3. Busca por texto visível no DOM
+4. API REST `GET /sales/{saleId}`
 
 ---
 
@@ -75,7 +83,14 @@ Brigadeiro,3.50,Doces,Sabores variados,N,S
 ```
 
 - **Colunas**: nome, valor, categoria, descrição, pesado (S/N), taxa de serviço (S/N)
+- Categorias são criadas automaticamente se não existirem
 - Clique em **Importar Lote** para processar
+
+### Desfazer importação:
+- Após importar, o botão **"↩️ Desfazer Última Importação"** aparece automaticamente
+- Mostra data e quantidade de produtos importados
+- Pede confirmação antes de deletar os produtos da SAIPOS
+- Remove todos os produtos criados na última importação via API
 
 ---
 
@@ -119,4 +134,4 @@ Esta extensão é uma ferramenta **auxiliar independente**, desenvolvida para su
 
 ---
 
-_Saipos Tools v6.5.1 — Abril / 2026_
+_Saipos Tools v6.6.0 — Abril / 2026_
