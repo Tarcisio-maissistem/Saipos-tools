@@ -1,5 +1,5 @@
 ﻿// ================================================================
-// SAIPOS TOOLS v6.4.1 — partial-payment.js (ISOLATED world, document_idle)
+// SAIPOS TOOLS v6.4.2 — partial-payment.js (ISOLATED world, document_idle)
 // Botão "Resumo" na tela de pagamento do SAIPOS
 // Abre modal visual com itens, pagamentos realizados e saldo restante
 // Opção de imprimir via .saiposprt (SAIPOS Printer)
@@ -613,13 +613,8 @@
   async function downloadSaiposprt(data, storeInfo) {
     const { json, fileName } = buildSaiposprtJSON(data, storeInfo);
     const jsonStr = JSON.stringify(json);
-    // Converte string para bytes UTF-8, depois para base64 (preserva acentos)
-    const utf8Bytes = new TextEncoder().encode(jsonStr);
-    let binary = '';
-    for (let i = 0; i < utf8Bytes.length; i++) {
-      binary += String.fromCharCode(utf8Bytes[i]);
-    }
-    const base64 = btoa(binary);
+    // btoa() codifica como Latin-1 (1 byte por char) — compatível com SAIPOS Printer
+    const base64 = btoa(jsonStr);
 
     // Download via background.js usando chrome.downloads API
     return new Promise((resolve) => {
@@ -1119,7 +1114,7 @@
   }
 
   function init() {
-    console.log('[SaiposTools] partial-payment.js v6.4.1 carregado');
+    console.log('[SaiposTools] partial-payment.js v6.4.2 carregado');
 
     window.addEventListener('hashchange', () => handleRouteChange());
     handleRouteChange();
