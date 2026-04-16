@@ -520,14 +520,14 @@
     rows.push('<barra_largura>3</barra_largura>');
     rows.push('<barra_altura>120</barra_altura>');
 
-    // Cabeçalho da loja
-    if (storeInfo.nome) rows.push('</ae>' + cleanStoreName(storeInfo.nome));
-    if (storeInfo.cnpj) rows.push('</ae>CNPJ: ' + storeInfo.cnpj);
-    if (storeInfo.endereco) rows.push('</ae>' + storeInfo.endereco);
+    // Cabeçalho da loja (centralizado)
+    if (storeInfo.nome) rows.push('</ce><n>' + cleanStoreName(storeInfo.nome) + '</n>');
+    if (storeInfo.cnpj) rows.push('</ce>CNPJ: ' + storeInfo.cnpj);
+    if (storeInfo.endereco) rows.push('</ce>' + storeInfo.endereco);
     if (storeInfo.cidade) {
       let c = storeInfo.cidade;
       if (storeInfo.bairro) c += ' - ' + storeInfo.bairro;
-      rows.push('</ae>' + c);
+      rows.push('</ce>' + c);
     }
     rows.push('</ae></linha_simples>');
 
