@@ -1458,6 +1458,56 @@
       })();
       return true;
     }
+    // v6.6.0 — Desfazer última importação (deleta produtos criados)
+    if (msg.action === 'UNDO_IMPORT') {
+      (async () => {
+        try {
+          const data = await new Promise(r => chrome.storage.local.get('lastImport', r));
+          const record = data?.lastImport;
+          if (!record || !record.products?.length) {
+            return sendResponse({ error: 'Nenhuma importação para desfazer.' });
+          }
+
+          let storeId = record.storeId || getStoreIdFromUrl();
+          if (!storeId) return sendResponse({ error: 'Store ID não encontrado.' });
+
+          if (!_authHeaders) {
+            const h = await getAuthHeaders();
+            if (!h) return sendResponse({ error: 'Headers não encontrados! Recarregue a página.' });
+          }
+
+          sendResponse({ started: true });
+
+          const products = record.products;
+          let deleted = 0;
+          let errors = 0;
+
+          for (let i = 0; i < products.length; i++) {
+            emit('CSV_LOG', { text: `🗑️ Removendo: ${i + 1}/${products.length} — "${products[i].nome}"...` });
+            try {
+              const url = `https://api.saipos.com/v1/stores/${storeId}/items/${products[i].id}`;
+              const res = await mainWorldFetch(url, 'DELETE');
+              if (res && res.error) errors++;
+              else deleted++;
+            } catch(e) {
+              errors++;
+            }
+            await sleep(500);
+          }
+
+          // Limpa o registro após desfazer
+          chrome.storage.local.remove('lastImport');
+          chrome.runtime.sendMessage({ type: 'UNDO_DONE' });
+
+          emit('CSV_LOG', { text: `✅ <b>Importação desfeita!</b><br/>Removidos: ${deleted} | Erros: ${errors}.<br/><i>Atualizando página em 2s...</i>` });
+          setTimeout(() => window.location.reload(), 2000);
+        } catch(err) {
+          emit('CSV_LOG', { text: `❌ Erro ao desfazer: ${err.message}` });
+        }
+      })();
+      return true;
+    }
+
     if (msg.action === 'IMPORT_CSV') {
       (async () => {
         try {
@@ -1478,6 +1528,8 @@
           const rows = msg.rows;
           let successCount = 0;
           let errCount = 0;
+          // v6.6.0 — armazena IDs criados para possibilitar rollback
+          const createdProducts = [];
 
           emit('CSV_LOG', { text: `⏳ Iniciando importação de ${rows.length} produtos... Buscando chaves da loja...` });
           
@@ -1501,7 +1553,6 @@
             const vUrl = `https://api.saipos.com/v1/stores/${storeId}/variations?filter=` + encodeURIComponent(JSON.stringify({ limit: 100 }));
             const vRes = await mainWorldFetch(vUrl);
             const varList = vRes?.data?.rows || vRes?.data || [];
-            // Procuramos uma variação declarada "Única" na loja para evitar "Preço Variável"
             let unica = varList.find(v => v.is_unique === "Y" || v.desc_store_variation.toLowerCase().includes("únic"));
             if (!unica && varList.length > 0) unica = varList[0];
             
@@ -1527,8 +1578,13 @@
             
             let finalCategoryId = defaultCategoryId;
 
+            // v6.6.0 — busca categoria por múltiplos campos possíveis da API
             if (p_categoria && p_categoria.toLowerCase() !== 'sem categoria') {
-              let catMatch = storeCategories.find(c => c.desc_category && c.desc_category.toLowerCase() === p_categoria.toLowerCase());
+              const catNorm = p_categoria.toLowerCase();
+              let catMatch = storeCategories.find(c => {
+                const desc = (c.desc_category || c.desc_category_item || c.desc_store_category_item || '').toLowerCase();
+                return desc === catNorm;
+              });
               if (catMatch) {
                 finalCategoryId = catMatch.id_store_category_item || catMatch.id;
               } else {
@@ -1556,7 +1612,6 @@
               }
             }
 
-            // Required valid payload structure for SAIPOS POST /items
             const payload = {
               "id_store": parseInt(storeId),
               "id_store_item": 0,
@@ -1602,7 +1657,6 @@
             };
 
             try {
-                // mainWorldFetch was implemented correctly in content.js and bypasses CORS / isolated world issues
                 const url = `https://api.saipos.com/v1/stores/${storeId}/items`;
                 const res = await mainWorldFetch(url, 'POST', payload);
 
@@ -1610,6 +1664,9 @@
                     errCount++;
                 } else {
                     successCount++;
+                    // v6.6.0 — salva ID do produto criado para rollback
+                    const newId = res?.data?.id_store_item || res?.data?.id;
+                    if (newId) createdProducts.push({ id: newId, nome: p_nome, categoria: p_categoria });
                 }
             } catch (err) {
                 errCount++;
@@ -1617,11 +1674,26 @@
 
             emit('CSV_LOG', { text: `⏳ Importando: ${i + 1}/${rows.length}...` });
 
-            // Pausa de 700ms entre requisições — essencial para não acionar o WAF
             await sleep(700);
           }
 
+          // v6.6.0 — salva histórico da importação no storage para desfazer
+          if (createdProducts.length > 0) {
+            try {
+              const importRecord = {
+                storeId,
+                timestamp: Date.now(),
+                date: new Date().toLocaleString('pt-BR'),
+                total: createdProducts.length,
+                products: createdProducts
+              };
+              chrome.storage.local.set({ lastImport: importRecord });
+            } catch(e) {}
+          }
+
           emit('CSV_LOG', { text: `✅ <b>Finalizado!</b><br/>Inseridos: ${successCount} | Erros: ${errCount}.<br/><i>Atualizando página do Saipos em 2s...</i>` });
+          // v6.6.0 — notifica popup que importação finalizou (atualiza botão desfazer)
+          chrome.runtime.sendMessage({ type: 'IMPORT_DONE', count: successCount });
           setTimeout(() => window.location.reload(), 2000);
 
         } catch(err) {

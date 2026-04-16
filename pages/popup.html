@@ -189,7 +189,7 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
   <div class="tab active" data-tab="log">LOG</div>
   <div class="tab" data-tab="resumo">COMISSÕES</div>
   <div class="tab" data-tab="happyhour">HAPPY HOUR</div>
-  <div class="tab" data-tab="csv">CSV</div>
+  <div class="tab" data-tab="csv">IMPORTAR PROD.</div>
 </div>
 
 <div class="panel active" id="panel-log">
@@ -293,6 +293,8 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
       <i style="color:var(--muted); font-size:11px;">Cole o conteúdo (colunas: nome, valor, categoria, descricao, pesado(S/N), taxa(S/N))</i><br/>
       <textarea id="csvTextInputSaipos" placeholder="nome,valor,categoria,descricao,pesado,taxa_servico&#10;Brigadeiro,3.50,Doces,Sabores variados,N,S" style="flex:1; margin-top: 10px; width:100%; border: 1px solid var(--bord); padding: 8px; border-radius: 4px; font-family:'IBM Plex Mono', monospace; font-size: 11px; resize:none; background:var(--s2); color:var(--txt);"></textarea>
       <button class="btn b-start" id="btnProcessCsv" style="width:100%; padding:10px; margin-top:10px; flex-shrink: 0;">Importar Lote</button>
+      <button class="btn b-stop" id="btnUndoImport" style="width:100%; padding:10px; margin-top:8px; flex-shrink: 0; display:none;">↩️ Desfazer Última Importação</button>
+      <div id="undoInfo" style="font-size:11px; color:var(--muted); margin-top:6px; flex-shrink:0; display:none;"></div>
       <div id="csvLogStatus" style="font-size:12px; color:var(--warn); margin-top:10px; flex-shrink: 0;"></div>
   </div>
 </div>

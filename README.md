@@ -1,6 +1,6 @@
 # Saipos Tools v6.5.1
 
-Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Happy Hour Automático**, **Resumo da Conta com Impressão** e **Importação CSV**.
+Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Happy Hour Automático**, **Resumo da Conta com Impressão** e **Importação de Produtos**.
 
 ---
 
@@ -64,9 +64,18 @@ Botão **"Resumo"** injetado na tela de fechamento de conta (`/table-order/close
 
 ---
 
-## 📋 4. Importação CSV
+## 📋 4. Importar Produtos
 
-Na aba **CSV** do painel, cole dados em formato CSV para importação em lote de produtos.
+Na aba **IMPORTAR PROD.** do painel, cole dados em formato CSV para importação em lote de produtos.
+
+### Formato esperado:
+```
+nome,valor,categoria,descricao,pesado,taxa_servico
+Brigadeiro,3.50,Doces,Sabores variados,N,S
+```
+
+- **Colunas**: nome, valor, categoria, descrição, pesado (S/N), taxa de serviço (S/N)
+- Clique em **Importar Lote** para processar
 
 ---
 

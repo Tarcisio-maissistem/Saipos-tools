@@ -357,6 +357,41 @@ async function restoreState() {
 }
 
 // ── CSV Import Logic ─────────────────────────────────────────
+
+// v6.6.0 — Verifica se existe importação para desfazer
+async function checkUndoAvailable() {
+  try {
+    const data = await chrome.storage.local.get('lastImport');
+    const record = data?.lastImport;
+    const btnUndo = $('btnUndoImport');
+    const undoInfo = $('undoInfo');
+    if (record && record.products?.length > 0) {
+      btnUndo.style.display = 'block';
+      undoInfo.style.display = 'block';
+      undoInfo.innerHTML = `📦 Última importação: <b>${record.total} produtos</b> em ${record.date}`;
+    } else {
+      btnUndo.style.display = 'none';
+      undoInfo.style.display = 'none';
+    }
+  } catch(e) {}
+}
+checkUndoAvailable();
+
+// v6.6.0 — Botão desfazer última importação
+$('btnUndoImport').addEventListener('click', async () => {
+  const logStatus = $('csvLogStatus');
+  if (!confirm('Tem certeza? Todos os produtos da última importação serão DELETADOS do Saipos.')) return;
+  logStatus.innerText = '🔄 Iniciando remoção...';
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) { logStatus.innerText = '❌ Aba do Saipos não encontrada!'; return; }
+    const res = await chrome.tabs.sendMessage(tab.id, { action: 'UNDO_IMPORT' });
+    if (res && res.error) logStatus.innerText = '❌ ' + res.error;
+  } catch(err) {
+    logStatus.innerText = '❌ Erro de comunicação: recarregue a página do Saipos.';
+  }
+});
+
 $('btnProcessCsv').addEventListener('click', async () => {
     const textInput = $('csvTextInputSaipos');
     const logStatus = $('csvLogStatus');
@@ -406,6 +441,10 @@ chrome.runtime.onMessage.addListener(msg => {
     if (msg.type === 'CSV_LOG') {
         const logStatus = $('csvLogStatus');
         if (logStatus) logStatus.innerHTML = msg.text;
+    }
+    // v6.6.0 — atualiza botão desfazer após importação ou undo
+    if (msg.type === 'IMPORT_DONE' || msg.type === 'UNDO_DONE') {
+        checkUndoAvailable();
     }
 });
 
