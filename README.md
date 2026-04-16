@@ -102,4 +102,12 @@ Saipos Tools/
 
 ---
 
+## ⚠️ Aviso Legal
+
+Esta extensão é uma ferramenta **auxiliar independente**, desenvolvida para suprir funcionalidades complementares que auxiliam na operação do PDV. **Não possui vínculo oficial** com a SAIPOS.
+
+**SAIPOS** é uma marca registrada de seus respectivos proprietários. Todos os direitos sobre a plataforma, API, nome, logotipo e demais propriedades intelectuais são **reservados exclusivamente à SAIPOS e seus detentores**.
+
+---
+
 _Saipos Tools v6.5.1 — Abril / 2026_
