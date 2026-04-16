@@ -38,9 +38,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       url: dataUrl,
       filename: msg.fileName,
       saveAs: false
-    }, (downloadId) => {
-      console.log('[SaiposTools BG] Download criado, id:', downloadId);
-    });
+    }, () => {});
     sendResponse({ ok: true });
     return true;
   }

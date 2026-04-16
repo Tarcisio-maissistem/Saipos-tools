@@ -1,5 +1,5 @@
 ﻿// ================================================================
-// SAIPOS TOOLS v6.4.2 — partial-payment.js (ISOLATED world, document_idle)
+// SAIPOS TOOLS v6.5.0 — partial-payment.js (ISOLATED world, document_idle)
 // Botão "Resumo" na tela de pagamento do SAIPOS
 // Abre modal visual com itens, pagamentos realizados e saldo restante
 // Opção de imprimir via .saiposprt (SAIPOS Printer)
@@ -127,7 +127,6 @@
       if (nome) items.push({ nome, qtd, valor });
     });
 
-    console.log('[SaiposTools] readItemsFromCloseScreen:', items.length, 'itens');
     return items;
   }
 
@@ -139,13 +138,11 @@
     // Encontra o botão "Pagamentos realizados (N)"
     const paymentBtn = document.querySelector('[data-qa="payment-made"]');
     if (!paymentBtn) {
-      console.log('[SaiposTools] Botão payment-made não encontrado');
       return payments;
     }
 
     // Verifica se está desabilitado (0 pagamentos)
     if (paymentBtn.disabled) {
-      console.log('[SaiposTools] Botão payment-made desabilitado (sem pagamentos)');
       return payments;
     }
 
@@ -153,18 +150,15 @@
     const countMatch = paymentBtn.textContent.match(/\((\d+)\)/);
     const count = countMatch ? parseInt(countMatch[1]) : 0;
     if (count === 0) {
-      console.log('[SaiposTools] 0 pagamentos no botão');
       return payments;
     }
 
     // Clica para abrir o modal de pagamentos parciais
     paymentBtn.click();
-    console.log('[SaiposTools] Clicou em payment-made, aguardando modal...');
 
     // Aguarda o modal aparecer (max 3s)
     const modalContent = await waitForElement('.modal-content [ng-repeat="item in vm.payments"]', 3000);
     if (!modalContent) {
-      console.warn('[SaiposTools] Modal de pagamentos não apareceu');
       return payments;
     }
 
@@ -194,16 +188,13 @@
       if (valor > 0) payments.push({ forma, valor });
     });
 
-    console.log('[SaiposTools] Lidos', payments.length, 'pagamentos do modal');
-
     // Fecha o modal clicando em "Voltar"
     const closeBtn = document.querySelector('.modal-content [data-qa="come-back"]')
       || document.querySelector('.modal-footer [data-qa="come-back"]')
       || document.querySelector('.modal-footer .btn-danger');
     if (closeBtn) {
       closeBtn.click();
-      console.log('[SaiposTools] Modal de pagamentos fechado');
-      await delay(300); // Aguarda fechar
+      await delay(300);
     }
 
     return payments;
@@ -267,7 +258,6 @@
       });
     }
 
-    console.log('[SaiposTools] readTotaisFromDOM: totalGeral=' + totalGeral + ', totalItens=' + totalItens);
     return {
       totalGeral, totalItens,
       taxaServico: taxaServicoEl ? parseBRL(taxaServicoEl.textContent) : 0,
@@ -400,7 +390,6 @@
   async function fetchOriginalSaleItems() {
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        console.log('[SaiposTools] Timeout ao buscar itens originais do scope');
         resolve(null);
       }, 3000);
 
@@ -410,14 +399,11 @@
         try {
           const result = JSON.parse(e.detail);
           if (result && result.sale_items && result.sale_items.length > 0) {
-            console.log('[SaiposTools] Itens originais do scope:', result.sale_items.length);
             resolve(result);
           } else {
-            console.log('[SaiposTools] Scope sem itens');
             resolve(null);
           }
         } catch (err) {
-          console.error('[SaiposTools] Erro ao parsear resposta do scope:', err);
           resolve(null);
         }
       };
@@ -465,8 +451,6 @@
       return { ...item, qtd, valor };
     });
 
-    console.log('[SaiposTools] Valores restaurados: ratio=' + ratio.toFixed(4)
-      + ', totalOriginal=' + totalOriginal);
     return { items: restoredItems, totalOriginal };
   }
 
@@ -623,11 +607,6 @@
         data: base64,
         fileName
       }, (response) => {
-        if (response && response.ok) {
-          console.log('[SaiposTools] Download enviado para background:', fileName);
-        } else {
-          console.error('[SaiposTools] Erro no download:', response);
-        }
         resolve();
       });
     });
@@ -797,7 +776,6 @@
     for (const sel of selectors) {
       const el = document.querySelector(sel);
       if (el) {
-        console.log('[SaiposTools] Âncora encontrada:', sel);
         return el;
       }
     }
@@ -831,7 +809,6 @@
     btnRow.appendChild(btnCol);
 
     parentContainer.parentNode.insertBefore(btnRow, parentContainer.nextSibling);
-    console.log('[SaiposTools] Botão Resumo da Conta injetado');
     return true;
   }
 
@@ -978,7 +955,6 @@
       }, 2000);
     });
 
-    console.log('[SaiposTools] Modal de resumo exibido');
   }
 
   // Coleta dados do DOM e abre modal
@@ -1002,15 +978,12 @@
     let items = parseScopeItems(saleData);
     if (!items || items.length === 0) {
       items = readItemsFromCloseScreen();
-      console.log('[SaiposTools] Usando itens do DOM (fallback)');
     }
 
     // Pagamentos do scope, ou fallback via modal do SAIPOS
     let payments = parseScopePayments(saleData);
     if (!payments || payments.length === 0) {
       payments = await readPaymentsMadeFromDOM();
-    } else {
-      console.log('[SaiposTools] Usando pagamentos do scope:', payments.length);
     }
 
     // Calcula total pago
@@ -1084,19 +1057,14 @@
           retryCount++;
 
           // Na 1ª tentativa, loga data-qa para diagnóstico
-          if (retryCount === 1) {
-            const allQa = [...document.querySelectorAll('[data-qa]')].map(el => el.getAttribute('data-qa'));
-            console.log('[SaiposTools] data-qa disponíveis:', allQa);
-          }
+
 
           const anchor = findAnchorElement();
           if (!anchor) {
             if (retryCount < MAX_RETRIES) {
-              console.log(`[SaiposTools] Âncora não encontrada (tentativa ${retryCount}/${MAX_RETRIES})`);
               checkTimeout = setTimeout(() => handleRouteChange(), 500);
               return;
             }
-            console.warn('[SaiposTools] Esgotou tentativas de encontrar âncora');
             return;
           }
 
@@ -1114,7 +1082,6 @@
   }
 
   function init() {
-    console.log('[SaiposTools] partial-payment.js v6.4.2 carregado');
 
     window.addEventListener('hashchange', () => handleRouteChange());
     handleRouteChange();

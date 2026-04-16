@@ -4,11 +4,9 @@
 // ================================================================
 (() => {
   if (window.__saiposInitialized) {
-    console.log('[Saipos] Script já inicializado');
     return;
   }
   window.__saiposInitialized = true;
-  console.log('[Saipos] Inicializando v4.8.0 (API mode)...');
 
   // ── Estado ──────────────────────────────────────────────────
   const EXT = window.__saiposExt = {
@@ -36,12 +34,10 @@
   function log(msg, type = 'info') {
     const entry = { msg, type, time: new Date().toLocaleTimeString('pt-BR') };
     EXT.log.push(entry);
-    console.log('[Saipos] ' + entry.time + ' ' + msg);
     emit('LOG', { entry });
   }
 
   function debug(msg) {
-    if (EXT.debug) console.log('[Saipos DEBUG] ' + msg);
   }
 
   // ── Auth Headers ────────────────────────────────────────────
@@ -1497,7 +1493,6 @@
             const catRes = await mainWorldFetch(catUrl);
             storeCategories = catRes?.data?.rows || catRes?.data || [];
           } catch (e) {
-            console.error("Falha ao buscar chaves iniciais", e);
           }
 
           let defaultVariationId = null;
@@ -1515,7 +1510,6 @@
               defaultVariationObj = unica;
             }
           } catch(e) {
-             console.error("Falha ao buscar variações genéricas", e);
           }
 
           emit('CSV_LOG', { text: `⏳ Preparando importação de ${rows.length} produtos... (Pausa anti-ban 700ms ativada)` });
@@ -1558,7 +1552,6 @@
                     emit('CSV_LOG', { text: `✅ Categoria "${p_categoria}" auto-criada.` });
                   }
                 } catch(e) {
-                  console.error("Falha ao criar categoria", e);
                 }
               }
             }
@@ -1615,13 +1608,11 @@
 
                 if (res && res.error) {
                     errCount++;
-                    console.error(`❌ Falha ao inserir "${p_nome}":`, res.error);
                 } else {
                     successCount++;
                 }
             } catch (err) {
                 errCount++;
-                console.error(`❌ Erro de rede em "${p_nome}":`, err);
             }
 
             emit('CSV_LOG', { text: `⏳ Importando: ${i + 1}/${rows.length}...` });
@@ -1642,5 +1633,4 @@
     return true;
   });
 
-  console.log('[Saipos] Content script pronto (API mode)');
 })();

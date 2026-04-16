@@ -256,14 +256,12 @@
           }
         }
 
-        console.log('[Saipos Interceptor] sale_items encontrados:', result.sale_items.length);
         window.dispatchEvent(new CustomEvent('__saipos_sale_items_response', {
           detail: JSON.stringify(result)
         }));
         return;
       }
     } catch(e) {
-      console.error('[Saipos Interceptor] Erro ao ler Angular scope:', e);
     }
 
     window.dispatchEvent(new CustomEvent('__saipos_sale_items_response', {
@@ -297,12 +295,10 @@
     var c = calls[idx];
     try {
       var json = JSON.stringify({ data: c.response, url: c.url, status: c.status });
-      console.log('[Saipos DEBUG] Enviando cached response idx=' + idx + ' size=' + json.length);
       window.dispatchEvent(new CustomEvent('__saipos_call_response', {
         detail: json
       }));
     } catch(err) {
-      console.log('[Saipos DEBUG] Erro ao serializar cached response: ' + err.message);
       window.dispatchEvent(new CustomEvent('__saipos_call_response', {
         detail: JSON.stringify({ error: 'Serialize error: ' + err.message })
       }));

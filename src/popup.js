@@ -353,7 +353,6 @@ async function restoreState() {
     }
 
   } catch (e) {
-    console.log('[Popup] Sem estado para restaurar');
   }
 }
 
