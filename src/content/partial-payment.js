@@ -1,8 +1,9 @@
 ﻿// ================================================================
-// SAIPOS TOOLS v6.5.0 — partial-payment.js (ISOLATED world, document_idle)
+// SAIPOS TOOLS v6.6.0 — partial-payment.js (ISOLATED world, document_idle)
 // Botão "Resumo" na tela de pagamento do SAIPOS
 // Abre modal visual com itens, pagamentos realizados e saldo restante
 // Opção de imprimir via .saiposprt (SAIPOS Printer)
+// Fix: botão voltar redireciona para tela de edição em vez da tela principal
 // ================================================================
 (function () {
   'use strict';
@@ -1047,11 +1048,16 @@
   let checkTimeout = null;
   let retryCount = 0;
   const MAX_RETRIES = 30;
+  // v6.6.0 — salva saleId da tela close para corrigir botão voltar
+  let lastCloseSaleId = null;
 
   function handleRouteChange() {
     if (checkTimeout) clearTimeout(checkTimeout);
+    const hash = window.location.hash;
 
     if (isCloseScreen()) {
+      // Salva o saleId enquanto está na tela de pagamento
+      lastCloseSaleId = getSaleIdFromUrl();
       checkTimeout = setTimeout(() => {
         if (!uiInjected && isCloseScreen()) {
           retryCount++;
@@ -1078,6 +1084,18 @@
     } else {
       retryCount = 0;
       removeUI();
+
+      // v6.6.0 — Fix: redireciona para tela de edição ao sair do close
+      // Se saiu da tela close E não foi para a tela edit do mesmo sale, redireciona
+      if (lastCloseSaleId) {
+        const editHash = '#/app/sale/table-order/edit/' + lastCloseSaleId;
+        const currentSaleId = lastCloseSaleId;
+        lastCloseSaleId = null; // limpa para não repetir
+        if (!hash.includes('table-order/edit/' + currentSaleId) && !hash.includes('table-order/close/')) {
+          window.location.hash = editHash;
+          return;
+        }
+      }
     }
   }
 
