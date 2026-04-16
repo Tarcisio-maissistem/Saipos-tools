@@ -487,41 +487,79 @@
     })).filter(p => p.valor > 0);
   }
 
+  // v6.6.2 — busca itens via API REST (fallback quando scope falha)
+  // sale_price na API é o preço unitário ORIGINAL (não fracionado pelo SAIPOS)
+  async function fetchSaleItemsFromAPI(storeId, saleId) {
+    try {
+      const url = `https://api.saipos.com/v1/stores/${storeId}/sales/${saleId}`;
+      const sale = await fetchJson(url);
+      if (!sale) return null;
+
+      const rawItems = sale.sale_items || sale.items || sale.saleItems || [];
+      if (rawItems.length === 0) return null;
+
+      return rawItems.map(it => ({
+        nome: it.desc_item || it.desc_sale_item || it.name || '',
+        qtd: it.quantity || it.qty || 1,
+        valorUnit: it.sale_price || it.unit_price || it.price || 0,
+        valor: it.total_price || it.total || 0
+      })).filter(i => i.nome);
+    } catch (e) {
+      return null;
+    }
+  }
+
   // Restaura valores originais dos itens (SAIPOS frac. proporcional após pagamento)
-  // v6.6.1 — corrige arredondamento de centavos
+  // v6.6.2 — usa valorUnit (preço unitário original) quando disponível
   function restoreOriginalValues(items, totalGeral, totalPago) {
     if (totalPago <= 0 || totalGeral <= 0) return { items, totalOriginal: totalGeral };
 
     const totalOriginal = totalGeral + totalPago;
     const ratio = totalOriginal / totalGeral;
 
+    // Passo 1: restaurar quantidades e valores
     const restoredItems = items.map(item => {
-      // Restaura quantidade
+      // Restaura quantidade via ratio
       let qtd = item.qtd * ratio;
       if (Math.abs(qtd - Math.round(qtd)) < 0.08) qtd = Math.round(qtd);
       else qtd = Math.round(qtd * 100) / 100;
 
       let valor;
       if (item.valorUnit && item.valorUnit > 0) {
-        // Se tem preço unitário, recalcula direto (sem erro de arredondamento)
+        // Preço unitário original disponível (scope ou API) — cálculo exato
         valor = Math.round(qtd * item.valorUnit * 100) / 100;
       } else {
+        // Fallback DOM: sem preço unitário, usa ratio (pode ter ±1 centavo)
         valor = Math.round(item.valor * ratio * 100) / 100;
       }
 
       return { ...item, qtd, valor };
     });
 
-    // Correção de centavos: ajusta diferença entre soma e total esperado
-    const somaRestored = restoredItems.reduce((s, i) => s + i.valor, 0);
-    const diff = Math.round((totalOriginal - somaRestored) * 100);
-    if (diff !== 0 && Math.abs(diff) <= restoredItems.length) {
-      // Distribui centavos no item de maior valor (menos perceptível)
-      const sorted = [...restoredItems].sort((a, b) => b.valor - a.valor);
-      const step = diff > 0 ? 1 : -1;
-      let remaining = Math.abs(diff);
-      for (let i = 0; i < sorted.length && remaining > 0; i++) {
-        sorted[i].valor = Math.round((sorted[i].valor + step * 0.01) * 100) / 100;
+    // Passo 2: correção de centavos via largest-remainder method
+    // Garante que a soma dos itens = totalOriginal exatamente
+    const totalCents = Math.round(totalOriginal * 100);
+    const rawCents = restoredItems.map(i => i.valor * 100);
+    const floorCents = rawCents.map(c => Math.floor(c));
+    const remainders = rawCents.map((c, i) => c - floorCents[i]);
+
+    let floorSum = floorCents.reduce((s, c) => s + c, 0);
+    let toDistribute = totalCents - floorSum;
+
+    if (toDistribute !== 0 && Math.abs(toDistribute) <= restoredItems.length * 2) {
+      // Ordena por menor resto (distribui nos que mais precisam de ajuste)
+      const indices = remainders.map((r, i) => i);
+      if (toDistribute > 0) {
+        indices.sort((a, b) => remainders[b] - remainders[a]);
+      } else {
+        indices.sort((a, b) => remainders[a] - remainders[b]);
+      }
+
+      const step = toDistribute > 0 ? 1 : -1;
+      let remaining = Math.abs(toDistribute);
+      for (const idx of indices) {
+        if (remaining <= 0) break;
+        restoredItems[idx].valor = Math.round((restoredItems[idx].valor + step * 0.01) * 100) / 100;
         remaining--;
       }
     }
@@ -1049,8 +1087,13 @@
     // Busca dados originais do Angular scope (itens + pagamentos)
     const saleData = await fetchOriginalSaleItems();
 
-    // Itens originais do scope, ou fallback DOM
+    // Itens originais do scope, ou fallback API, ou fallback DOM
     let items = parseScopeItems(saleData);
+
+    // v6.6.2 — fallback API: busca sale_price (preço unitário original, não fracionado)
+    if ((!items || items.length === 0) && storeId && saleId) {
+      items = await fetchSaleItemsFromAPI(storeId, saleId);
+    }
     if (!items || items.length === 0) {
       items = readItemsFromCloseScreen();
     }
