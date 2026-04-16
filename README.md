@@ -1,51 +1,105 @@
-# Saipos Tools v4.8.0
+# Saipos Tools v6.5.1
 
-Extensão oficial para Google Chrome que adiciona as funcionalidades "Ocultas" ao seu painel Saipos: **Automação de Happy Hour** e **Relatórios de Comissão Limpos**.
+Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Happy Hour Automático**, **Resumo da Conta com Impressão** e **Importação CSV**.
 
 ---
 
 ## 📦 Como Instalar
 
-1. Abra o Chrome e cole isto na barra de links: `chrome://extensions/`
-2. No canto superior direito, ative a chavinha: **Modo do desenvolvedor**.
-3. Clique no botão **"Carregar sem compactação"**.
-4. Selecione a pasta da extensão (`Saipos Extensão v3.17`).
-5. Fixe o robôzinho no seu painel do navegador para acesso rápido!
+1. Abra `chrome://extensions/` no Chrome
+2. Ative o **Modo do desenvolvedor** (canto superior direito)
+3. Clique em **"Carregar sem compactação"**
+4. Selecione a pasta `Saipos Tools`
+5. A extensão abre como **Side Panel** — clique no ícone na barra do Chrome
 
 ---
 
-## 🍺 1. Happy Hour Automático
+## 📊 1. Relatório de Comissão por Garçom
 
-A extensão troca o preço dos seus produtos sozinho nas horas e dias marcados, exatamente como você cadastrar.
+Extrai vendas via API, calcula comissões e gera relatório visual completo.
 
-### Como funciona:
-1. Abra a extensão no navegador.
-2. Na aba de "Happy Hour", digite o **Nome Exato** do item (Ex: `SKOL 600ML`).
-3. Coloque o preço original e o preço promocional.
-4. Escolha os dias da semana e a janela de horas.
-5. Clique em **Salvar Promoção**. Pronto!
+### Como usar:
+1. Acesse https://conta.saipos.com → **Relatórios > Vendas por Período**
+2. Escolha o período e aguarde a tabela carregar
+3. Abra a extensão → aba **COMISSÕES** → clique **▶ INICIAR**
+4. Aguarde a coleta (barra de progresso mostra o andamento)
+5. Clique em **📄 RELATÓRIO** para abrir o relatório completo
 
-Enquanto a extensão/computador estiver rodando com o painel da Saipos aberto, o preço vai cair automaticamente no começo da janela de horas e voltar pro preço normal no fim.
-
-Você também pode clicar no botão **Edição (✏️)** nos itens listados na extensão caso precise alterar uns centavinhos de promoção.
-
----
-
-## 📊 2. Relatório de Comissão de Garçom
-
-A extensão lê todas as vendas da tela num piscar de olhos e monta um CSV limpinho pra você pagar quem vendeu mais mesas.
-
-### Como Gerar:
-1. Acesse sua loja em https://conta.saipos.com.
-2. No menu esquerdo, vá em: **Relatórios > Vendas por Período**.
-3. Escolha o período na Saipos (Ex: Hoje) e aguarde a tabela ser mostrada.
-4. Clique no ícone da nossa Extensão e clique em **▶ INICIAR**.
-5. Aguarde ela passar as páginas e fechar os modais (Não mude a tela!).
-6. Clique no botão azul escuro **📄 RELATÓRIO**. Uma janela nova com planilhas de rateio, comissão sem taxa burla, etc., vai abrir! Export em Excel e seja feliz.
+### O relatório inclui:
+- Resumo por garçom (total vendido, comissão, qtd de itens)
+- Detalhamento por venda (mesa, comanda, hora, itens, taxa de serviço)
+- Identificação de itens isentos de taxa
+- Alertas: vendas sem taxa, taxa < 10% (risco de burla), cancelamentos
+- Exportação: **CSV de Itens**, **CSV de Garçons**, **CSV de Vendas**, **Copiar** e **Imprimir**
 
 ---
 
-## 🔒 Segurança garantida
-Não pedimos suas senhas da Saipos ou acessos em nenhum momento. Tudo continua restrito às proteções originais da sua própria conta!
+## 🍺 2. Happy Hour Automático
 
-_Versão mais recente: Abril / 2026_
+Troca o preço dos produtos automaticamente nos horários e dias configurados.
+
+### Como configurar:
+1. Abra a extensão → aba **HAPPY HOUR**
+2. Preencha: nome exato do item, preço normal, preço promo
+3. Selecione os dias da semana e horário de início/fim
+4. Clique em **Salvar Promoção**
+
+O preço altera automaticamente quando entra na janela de horário e volta ao normal quando sai.
+
+- **✏️ Editar** / **🗑️ Deletar** promoções existentes
+- **💾 Exportar** / **📥 Importar** backup em JSON
+
+---
+
+## 🧾 3. Resumo da Conta (Impressão)
+
+Botão **"Resumo"** injetado na tela de fechamento de conta (`/table-order/close/`).
+
+### Funcionalidades:
+- Exibe modal com itens, quantidades e valores da mesa
+- Lê pagamentos já realizados (pagamento parcial)
+- Restaura valores originais (compensa o rateio proporcional do SAIPOS)
+- Calcula saldo restante
+- Gera arquivo `.saiposprt` para impressão via SAIPOS Printer
+
+---
+
+## 📋 4. Importação CSV
+
+Na aba **CSV** do painel, cole dados em formato CSV para importação em lote de produtos.
+
+---
+
+## 📁 Estrutura do Projeto
+
+```
+Saipos Tools/
+├── manifest.json
+├── icons/             # Ícones da extensão
+├── pages/             # HTMLs de interface
+│   ├── popup.html
+│   └── report.html
+└── src/
+    ├── background.js  # Service worker
+    ├── content/       # Scripts injetados no site
+    │   ├── interceptor.js
+    │   ├── content.js
+    │   └── partial-payment.js
+    ├── ui/            # Scripts de interface
+    │   ├── popup.js
+    │   └── report-page.js
+    └── lib/           # Bibliotecas auxiliares
+        └── report.js
+```
+
+---
+
+## 🔒 Segurança
+
+- Não solicita senhas ou credenciais
+- Funciona apenas em `conta.saipos.com`
+- Dados permanecem restritos à sua conta
+
+---
+
+_Saipos Tools v6.5.1 — Abril / 2026_
