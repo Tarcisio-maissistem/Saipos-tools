@@ -1,9 +1,11 @@
-// report-page.js — Script externo para o relatório (CSP-compliant) v4.6.0
+// report-page.js — Script externo para o relatório (CSP-compliant) v6.38.0
 
 let SALES_DATA = [];
 let STORE_NAME = 'Loja Saipos';
 let DATE_RANGE = null;
 let selectedGarcom = 'TODOS';
+let pctGarcomOverride = null; // null = dinâmico (usa taxa proporcional); número = % fixa do total de itens
+let pctCozinha = null;        // null = ignorado; número = % fixa sobre total de itens para a cozinha
 
 // Produtos isentos de comissão/taxa de serviço
 const PRODUTOS_ISENTOS = [
@@ -18,6 +20,13 @@ function isIsento(nome) {
 function calcTotalNaoIsento(items) {
   if (!items) return 0;
   return items.filter(i => !i.itemCancelado && !isIsento(i.nome)).reduce((a, i) => a + i.valor * i.qtd, 0);
+}
+
+// Calcula comissão de um item: usa % fixa se configurado, senão dinâmico pela taxa proporcional
+function calcCi(vt, exempt, totalNaoIsento, saleTaxa) {
+  if (exempt) return 0;
+  if (pctGarcomOverride !== null) return vt * (pctGarcomOverride / 100);
+  return totalNaoIsento > 0 ? (vt / totalNaoIsento) * saleTaxa : 0;
 }
 
 // Helpers
@@ -81,7 +90,7 @@ function getGlobalGarcom() {
       const g = (item.garcom || '?').toUpperCase().trim();
       const vt = item.valor * item.qtd;
       const exempt = isIsento(item.nome);
-      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
+      const ci = calcCi(vt, exempt, totalNaoIsento, sale.taxa);
       if (!globalGarcom[g]) globalGarcom[g] = { venda: 0, comissao: 0, qtd: 0 };
       globalGarcom[g].venda += vt;
       globalGarcom[g].comissao += ci;
@@ -119,6 +128,8 @@ function renderReport() {
   const garconsList = Object.keys(globalGarcom).sort();
 
   const totalComissaoGlobal = Object.values(globalGarcom).reduce((a, v) => a + v.comissao, 0);
+  const cozinhaComissaoGlobal = pctCozinha !== null ? gtItens * (pctCozinha / 100) : 0;
+  const totalComissaoCompleto = totalComissaoGlobal + cozinhaComissaoGlobal;
 
   // Formata período de datas
   let periodoLabel = '';
@@ -142,7 +153,7 @@ function renderReport() {
 <div class="cards">
   <div class="card ok"><div class="cl">Total em Itens</div><div class="cv">R$ ${fmt(gtItens)}</div></div>
   <div class="card ok"><div class="cl">Taxa de Serviço</div><div class="cv">R$ ${fmt(gtTaxa)}</div></div>
-  <div class="card ok"><div class="cl">💰 Total Comissões</div><div class="cv">R$ ${fmt(totalComissaoGlobal)}</div></div>
+  <div class="card ok"><div class="cl">💰 Total Comissões</div><div class="cv">R$ ${fmt(totalComissaoCompleto)}</div></div>
   <div class="card ok"><div class="cl">Ticket Médio</div><div class="cv">R$ ${fmt(ticketMedio)}</div></div>
   <div class="card ok"><div class="cl">Taxa média</div><div class="cv">${gtItens > 0 ? (gtTaxa/gtItens*100).toFixed(1).replace('.',',') : '0,0'}%</div></div>
   <div class="card warn"><div class="cl">Taxa &lt; 10%</div><div class="cv">${gtBaixaTaxa} vendas</div></div>
@@ -157,6 +168,22 @@ function renderReport() {
   <button class="btn btn-outline" id="btnCSVCompleto">📊 Exportar CSV</button>
   <button class="btn btn-outline" id="btnAlertas">⚠️ Ver Alertas</button>
   <label class="print-option"><input type="checkbox" id="chkPrintDaily"> 📅 Separar por dia (impressão)</label>
+</div>
+
+<div class="comissao-config">
+  <span class="cc-label">⚙️ Comissões</span>
+  <div class="cc-field">
+    <label for="inputPctGarcom">% Garçom</label>
+    <input type="number" id="inputPctGarcom" class="cc-input" min="0" max="100" step="0.1"
+      placeholder="Dinâmico" value="${pctGarcomOverride !== null ? pctGarcomOverride : ''}">
+    <span class="cc-hint">vazio = usa taxa proporcional da comanda</span>
+  </div>
+  <div class="cc-field">
+    <label for="inputPctCozinha">% Cozinha</label>
+    <input type="number" id="inputPctCozinha" class="cc-input" min="0" max="100" step="0.1"
+      placeholder="Ignorado" value="${pctCozinha !== null ? pctCozinha : ''}">
+    <span class="cc-hint">vazio = não calcula cozinha</span>
+  </div>
 </div>
 
 <div class="global-section">
@@ -185,6 +212,16 @@ function renderReport() {
   <td class="tr" style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0f1117">R$ ${fmt(v.comissao)}</td>
   <td class="tc">${v.qtd}</td>
   <td class="tc"><button class="btn-copy-garcom" data-garcom="${gEncoded}">📋 Copiar</button></td>
+</tr>`;
+  }
+  // Linha cozinha na tabela global (se % cozinha configurado)
+  if (pctCozinha !== null) {
+    H += `<tr>
+  <td><span class="garcom-chip" style="background:#fef3c7;color:#92400e;font-size:13px">🍳 COZINHA</span></td>
+  <td class="tr" style="font-family:'IBM Plex Mono',monospace">R$ ${fmt(gtItens)}</td>
+  <td class="tr" style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0f1117">R$ ${fmt(cozinhaComissaoGlobal)}</td>
+  <td class="tc">—</td>
+  <td class="tc">—</td>
 </tr>`;
   }
   H += `</tbody></table></div>`;
@@ -250,10 +287,24 @@ function renderReport() {
   <div class="tag">Hora <b>${hora}</b></div>
   <div class="tag">Pagamento <b>${sale.pagamento || '—'}</b></div>
   <div class="tag">Itens <b>R$ ${fmt(sale.totalItens)}</b></div>
-  <div class="tag">Taxa <b>R$ ${fmt(sale.taxa)}</b></div>
-  <span class="badge ${pctClass(pct, sale.canceled)}">${pctLabel(pct, sale.canceled)}</span>
+  <div class="tag">Taxa <b>R$ ${fmt(sale.taxa)}</b> <span class="badge ${pctClass(pct, sale.canceled)}" style="margin-left:4px">${pctLabel(pct, sale.canceled)}</span></div>
   ${sale.hasItemCanceled && !sale.canceled ? '<span class="badge c-item-cancel">Item Cancelado</span>' : ''}
-</div>`;
+</div>
+`;
+
+      // --- Pagamentos realizados, total pago e falta pagar ---
+      if (Array.isArray(sale.pagamentos) && sale.pagamentos.length > 0) {
+        const totalPago = sale.pagamentos.reduce((s, p) => s + (p.valor || 0), 0);
+        const faltaPagar = Math.max(0, (sale.totalItens + sale.taxa) - totalPago);
+        H += `<div class="pagamentos-wrap" style="padding:8px 14px 0 14px">
+          <div style="font-size:12px;color:#374151;margin-bottom:2px"><b>Pagamentos realizados:</b></div>
+          <ul style="margin:0 0 4px 0;padding:0 0 0 12px;font-size:12px;color:#374151">
+            ${sale.pagamentos.map(p => `<li>${p.forma}: <b>R$ ${fmt(p.valor)}</b></li>`).join('')}
+          </ul>
+          <div style="font-size:12px;color:#15803d;margin-bottom:2px">Total pago: <b>R$ ${fmt(totalPago)}</b></div>
+          <div style="font-size:12px;color:#b91c1c">Falta pagar: <b>R$ ${fmt(faltaPagar)}</b></div>
+        </div>`;
+      }
 
       if (sale.canceled) {
         H += `<div style="padding:10px 14px;color:#9ca3af;font-size:12px">🚫 Venda cancelada</div>`;
@@ -265,7 +316,7 @@ function renderReport() {
           const g = (item.garcom || '?').toUpperCase().trim();
           const vt = item.valor * item.qtd;
           const exempt = isIsento(item.nome);
-          const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
+          const ci = calcCi(vt, exempt, totalNaoIsento, sale.taxa);
           if (!vGarcom[g]) vGarcom[g] = { venda: 0, comissao: 0 };
           vGarcom[g].venda += vt;
           vGarcom[g].comissao += ci;
@@ -284,7 +335,7 @@ function renderReport() {
         for (const item of sale.items) {
           const vt = item.valor * item.qtd;
           const exempt = isIsento(item.nome);
-          const ci = (!exempt && !item.itemCancelado && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
+          const ci = item.itemCancelado ? 0 : calcCi(vt, exempt, totalNaoIsento, sale.taxa);
           const cls = item.itemCancelado ? ' class="tr-cancel"' : '';
           const g = (item.garcom || '?').toUpperCase().trim();
           const showItem = selectedGarcom === 'TODOS' || selectedGarcom === g;
@@ -328,6 +379,13 @@ function renderReport() {
         H += `<div class="ds-item" data-day-garcom="${g}" style="${showDay ? '' : 'display:none'}">
           <div class="ds-name">👤 ${g}</div>
           <div class="ds-val">Vendas R$ ${fmt(v.venda)} · <b>Comissão R$ ${fmt(v.comissao)}</b></div>
+        </div>`;
+      }
+      // Cozinha por dia
+      if (pctCozinha !== null) {
+        H += `<div class="ds-item">
+          <div class="ds-name" style="color:#92400e">🍳 COZINHA</div>
+          <div class="ds-val">Base R$ ${fmt(dItens)} · <b>Comissão R$ ${fmt(dItens * (pctCozinha / 100))}</b></div>
         </div>`;
       }
       H += `</div>`;
@@ -401,7 +459,7 @@ function renderReport() {
         const g = (item.garcom || '?').toUpperCase().trim();
         const vt = item.valor * item.qtd;
         const exempt = isIsento(item.nome);
-        const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
+        const ci = calcCi(vt, exempt, totalNaoIsento, sale.taxa);
         
         if (!dayGarcomPrint[g]) dayGarcomPrint[g] = { venda: 0, comissao: 0, itens: [] };
         dayGarcomPrint[g].venda += vt;
@@ -453,9 +511,24 @@ function renderReport() {
     }
     
     const dayTotalComissao = Object.values(dayGarcomPrint).reduce((a, v) => a + v.comissao, 0);
+    const cozinhaDiaPrint = pctCozinha !== null ? dayTotalItens * (pctCozinha / 100) : 0;
+    // Linha cozinha no resumo diário de impressão
+    if (pctCozinha !== null) {
+      H += `<table class="daily-garcom-table">
+        <thead>
+          <tr><th colspan="6" style="background:#fef3c7;color:#92400e;text-align:left;padding:10px 12px;font-size:14px">
+            🍳 COZINHA — Base: R$ ${fmt(dayTotalItens)} — <b>Comissão: R$ ${fmt(cozinhaDiaPrint)}</b>
+          </th></tr>
+        </thead>
+        <tbody><tr class="daily-total-row">
+          <td colspan="5" style="text-align:right;font-weight:700">Total Cozinha:</td>
+          <td class="tr" style="font-weight:700;color:#0f1117">R$ ${fmt(cozinhaDiaPrint)}</td>
+        </tr></tbody>
+      </table>`;
+    }
     H += `<div class="daily-day-total">
       <span>💰 Total Comissões do Dia ${dia}:</span>
-      <span style="font-weight:700;font-size:16px">R$ ${fmt(dayTotalComissao)}</span>
+      <span style="font-weight:700;font-size:16px">R$ ${fmt(dayTotalComissao + cozinhaDiaPrint)}</span>
     </div>`;
     H += `</div>`;
   }
@@ -477,6 +550,26 @@ function setupEventListeners() {
     selectedGarcom = this.value;
     applyFilter();
   });
+
+  // % Garçom: ao mudar, recalcula e re-renderiza tudo
+  const inputPctGarcom = document.getElementById('inputPctGarcom');
+  if (inputPctGarcom) {
+    inputPctGarcom.addEventListener('change', function() {
+      const v = parseFloat(this.value);
+      pctGarcomOverride = (this.value === '' || isNaN(v)) ? null : v;
+      renderReport();
+    });
+  }
+
+  // % Cozinha: ao mudar, recalcula e re-renderiza tudo
+  const inputPctCozinha = document.getElementById('inputPctCozinha');
+  if (inputPctCozinha) {
+    inputPctCozinha.addEventListener('change', function() {
+      const v = parseFloat(this.value);
+      pctCozinha = (this.value === '' || isNaN(v)) ? null : v;
+      renderReport();
+    });
+  }
 
   document.getElementById('chkPrintDaily').addEventListener('change', function() {
     document.body.classList.toggle('print-daily', this.checked);
@@ -625,7 +718,7 @@ function renderIndividualGarcom(garcom) {
       const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11, 16) : '';
       const vt = item.valor * item.qtd;
       const exempt = isIsento(item.nome);
-      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
+      const ci = calcCi(vt, exempt, totalNaoIsento, sale.taxa);
       
       if (!byDate[dia]) byDate[dia] = { itens: [], totalVenda: 0, totalComissao: 0 };
       byDate[dia].itens.push({
@@ -777,7 +870,7 @@ function copiarGarcom(garcomEncoded, btn) {
       const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11,16) : '';
       const vt = item.valor * item.qtd;
       const exempt = isIsento(item.nome);
-      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
+      const ci = calcCi(vt, exempt, totalNaoIsento, sale.taxa);
 
       if (!byDate[dia]) byDate[dia] = [];
       byDate[dia].push({
@@ -881,7 +974,7 @@ function copiarTudo() {
         for (const item of sale.items) {
           const vt = item.valor * item.qtd;
           const exempt = isIsento(item.nome);
-          const ci = (!exempt && !item.itemCancelado && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
+          const ci = item.itemCancelado ? 0 : calcCi(vt, exempt, totalNaoIsento, sale.taxa);
           const nome = (item.nome || '?').substring(0, 32);
           const garcom = (item.garcom || '?').toUpperCase().trim();
           const cancelStr = item.itemCancelado ? ' [CANC]' : '';
@@ -1026,7 +1119,7 @@ function exportarCSVCompleto(btn) {
       const g = (item.garcom || '?').toUpperCase().trim();
       const vt = item.valor * item.qtd;
       const exempt = isIsento(item.nome);
-      const ci = (!exempt && totalNaoIsento > 0) ? (vt / totalNaoIsento) * sale.taxa : 0;
+      const ci = calcCi(vt, exempt, totalNaoIsento, sale.taxa);
       if (!garcom[g]) garcom[g] = { venda: 0, comissao: 0, qtd: 0 };
       garcom[g].venda += vt;
       garcom[g].comissao += ci;

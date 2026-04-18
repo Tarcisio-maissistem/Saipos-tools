@@ -178,6 +178,19 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
 .daily-total-row td{font-weight:700;color:#15803d;border-top:2px solid #bbf7d0!important}
 .daily-day-total{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%);border-top:2px solid #22c55e;font-size:14px;color:#166534}
 
+/* ─── Configuração de % comissão ─── */
+.comissao-config{display:flex;align-items:center;gap:20px;background:#fff;border-radius:10px;
+  padding:12px 18px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,.08);flex-wrap:wrap}
+.cc-label{font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:12px;color:#0f1117;
+  white-space:nowrap;margin-right:4px}
+.cc-field{display:flex;align-items:center;gap:8px}
+.cc-field label{font-size:12px;color:#374151;font-weight:600;white-space:nowrap}
+.cc-input{padding:6px 10px;border:1.5px solid #d1d5db;border-radius:6px;font-size:13px;
+  width:90px;font-family:'IBM Plex Mono',monospace;color:#0f1117;background:#f9fafb;
+  text-align:center}
+.cc-input:focus{outline:none;border-color:#00c27c;box-shadow:0 0 0 2px rgba(0,194,124,.15);background:#fff}
+.cc-hint{font-size:10px;color:#9ca3af}
+
 /* ─── Opções de impressão ─── */
 .print-options{display:flex;align-items:center;gap:16px;margin-left:auto}
 .print-option{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:#374151}
@@ -188,6 +201,7 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
   body{background:#fff;font-size:11px;margin:0;padding:0}
   .page{padding:0;max-width:100%;margin:0}
   .toolbar{display:none!important;height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}
+  .comissao-config{display:none!important}
   .btn,.alertas-wrap,.btn-copy-garcom,.filter-wrap,.print-options{display:none!important}
   .cards{margin-bottom:16px}
   .card{break-inside:avoid}

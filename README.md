@@ -1,6 +1,6 @@
-# Saipos Tools v6.6.0
+# Saipos Tools v6.41.0
 
-Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Happy Hour Automático**, **Resumo da Conta com Impressão** e **Importação de Produtos**.
+Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Happy Hour Automático**, **Resumo da Conta com Impressão**, **Importação de Produtos** e **Gestão de Estoque**.
 
 ---
 
@@ -48,12 +48,13 @@ O preço altera automaticamente quando entra na janela de horário e volta ao no
 
 - **✏️ Editar** / **🗑️ Deletar** promoções existentes
 - **💾 Exportar** / **📥 Importar** backup em JSON
+- **Persistência dupla**: dados salvos em `local` + `sync` — recupera automaticamente após reinstalação da extensão
 
 ---
 
 ## 🧾 3. Resumo da Conta (Impressão)
 
-Botão **"Resumo"** injetado na tela de fechamento de conta (`/table-order/close/`).
+Botão **"Resumo"** injetado na tela de fechamento e edição de conta.
 
 ### Funcionalidades:
 - Exibe modal com mesa, comanda, garçom, itens, quantidades e valores
@@ -62,7 +63,16 @@ Botão **"Resumo"** injetado na tela de fechamento de conta (`/table-order/close
 - Calcula saldo restante
 - Gera arquivo `.saiposprt` com cabeçalho centralizado (loja, CNPJ, endereço)
 - Leitura de mesa/comanda com 4 camadas de fallback (Angular scope, DOM data-qa, texto visível, API REST)
-- Botão voltar corrigido: retorna à tela de edição em vez da tela principal
+- Quantidade dos itens alinhada à direita com 2 espaços de separação
+
+### Correções implementadas:
+- **Botão voltar corrigido**: retorna à tela de edição em vez da tela principal
+- **Sobreposição do botão de impressão nativo**: intercepta o botão original do SAIPOS (capture phase) — funciona também na tela de edição da comanda
+- **Couvert não some**: flag `paymentWasCompleted` detecta POST para endpoints de pagamento e evita o redirect incorreto após fechamento da conta
+- **Sem travamento ao finalizar conta**: chamadas assíncronas paralelizadas + timeouts reduzidos; fallback DOM usado apenas como último recurso
+- **Pagamentos realizados sempre exibidos**: cadeia de fallback scope → API → DOM garante exibição mesmo quando Angular scope não está disponível
+- **StoreId detectado automaticamente**: interceptor captura o ID da loja via XHR/fetch para clientes sem `/stores/` na URL
+- **Taxa de serviço de múltiplas fontes**: leitura da taxa de serviço de campos da venda, `$rootScope` e shifts ativos da loja
 
 ![Resumo da Conta](images/resumo-conta.png)
 
@@ -85,6 +95,29 @@ Brigadeiro,3.50,Doces,Sabores variados,N,S
 
 ---
 
+## 📦 5. Gestão de Estoque
+
+Aba **ESTOQUE** protegida por senha para operações sensíveis no catálogo de produtos.
+
+### Funcionalidades:
+- **Catraca com senha**: acesso protegido (senha padrão: `314159`), com animação de cadeado
+- **💾 Fazer Backup**: exporta todos os produtos do catálogo em JSON (inclui dados completos)
+- **🗑️ Excluir Todos os Produtos**: remove todo o catálogo com log de progresso em tempo real
+- Log de operações exibido na tela durante o processo
+
+---
+
+## 🔒 Controle de Abas (Lock)
+
+O painel possui sistema de bloqueio por senha para restringir o acesso a abas específicas.
+
+- Abas bloqueadas ficam **completamente ocultas** (não aparecem na barra de navegação)
+- Ao bloquear a aba ativa, a extensão redireciona automaticamente para a primeira aba disponível
+- Senha padrão: `314159`
+- Configuração salva em `chrome.storage.local`
+
+---
+
 ## 📁 Estrutura do Projeto
 
 ```
@@ -98,9 +131,9 @@ Saipos Tools/
 └── src/
     ├── background.js  # Service worker
     ├── content/       # Scripts injetados no site
-    │   ├── interceptor.js
-    │   ├── content.js
-    │   └── partial-payment.js
+    │   ├── interceptor.js      # MAIN world — intercepta XHR/fetch, broadcast de eventos
+    │   ├── content.js          # ISOLATED world — importação e gestão de produtos
+    │   └── partial-payment.js  # ISOLATED world — Resumo da Conta e impressão
     ├── ui/            # Scripts de interface
     │   ├── popup.js
     │   └── report-page.js
@@ -112,7 +145,7 @@ Saipos Tools/
 
 ## 🔒 Segurança
 
-- Não solicita senhas ou credenciais
+- Não solicita senhas ou credenciais externas
 - Funciona apenas em `conta.saipos.com`
 - Dados permanecem restritos à sua conta
 
@@ -126,4 +159,4 @@ Esta extensão é uma ferramenta **auxiliar independente**, desenvolvida para su
 
 ---
 
-_Saipos Tools v6.6.0 — Abril / 2026_
+_Saipos Tools v6.41.0 — Abril / 2026_

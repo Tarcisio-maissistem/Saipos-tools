@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Saipos Tools",
-  "version": "6.6.4",
+  "version": "6.41.0",
   "description": "Extrai dados de vendas via API REST, calcula comissões por garçom e gera relatório.",
   "permissions": ["activeTab", "scripting", "downloads", "storage", "sidePanel"],
   "host_permissions": [

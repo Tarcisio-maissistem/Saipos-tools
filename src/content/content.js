@@ -1,5 +1,5 @@
 // ================================================================
-// SAIPOS TOOLS v4.8.0 — content.js (ISOLATED world, document_idle)
+// SAIPOS TOOLS v4.9.0 — content.js (ISOLATED world, document_idle)
 // Extrai dados via API REST direta com auth headers interceptados
 // ================================================================
 (() => {
@@ -1508,6 +1508,108 @@
       return true;
     }
 
+    // ── BACKUP: retorna todos os produtos do catálogo com dados completos ──
+    if (msg.action === 'BACKUP_PRODUCTS') {
+      (async () => {
+        try {
+          let storeId = getStoreIdFromUrl();
+          if (!storeId) { await getCapturedCalls(); storeId = getStoreIdFromUrl(); }
+          if (!storeId) return sendResponse({ error: 'StoreId não encontrado (aguarde a API carregar ou atualize a página).' });
+          if (!_authHeaders) {
+            const h = await getAuthHeaders();
+            if (!h) return sendResponse({ error: 'Auth indisponível. Faça login no Saipos.' });
+          }
+
+          // Busca TODOS os itens (habilitados + desabilitados) sem filtro de status
+          const filter = encodeURIComponent(JSON.stringify({ limit: 5000, skip: 0 }));
+          const url = `https://api.saipos.com/v1/stores/${storeId}/items?filter=${filter}`;
+          const res = await mainWorldFetch(url);
+
+          let items = null;
+          if (res && Array.isArray(res.data))           items = res.data;
+          else if (res && res.data && Array.isArray(res.data.rows)) items = res.data.rows;
+          else if (Array.isArray(res))                   items = res;
+
+          if (!items) return sendResponse({ error: 'Falha ao processar lista de produtos.' });
+
+          sendResponse({ success: true, items, storeId, timestamp: new Date().toISOString() });
+        } catch(err) {
+          sendResponse({ error: err.message });
+        }
+      })();
+      return true;
+    }
+
+    // ── DELETE ALL STOCK: apaga todos os produtos do catálogo um a um ──
+    if (msg.action === 'DELETE_ALL_STOCK') {
+      (async () => {
+        try {
+          let storeId = getStoreIdFromUrl();
+          if (!storeId) { await getCapturedCalls(); storeId = getStoreIdFromUrl(); }
+          if (!storeId) return sendResponse({ error: 'StoreId não encontrado.' });
+          if (!_authHeaders) {
+            const h = await getAuthHeaders();
+            if (!h) return sendResponse({ error: 'Auth indisponível. Faça login no Saipos.' });
+          }
+
+          sendResponse({ started: true }); // responde imediatamente; progresso vem via mensagens
+
+          emit('STOCK_LOG', { text: '🔍 Carregando lista de produtos...' });
+
+          // Busca todos os itens do catálogo
+          const filter = encodeURIComponent(JSON.stringify({ limit: 5000, skip: 0 }));
+          const url = `https://api.saipos.com/v1/stores/${storeId}/items?filter=${filter}`;
+          const res = await mainWorldFetch(url);
+
+          let items = null;
+          if (res && Array.isArray(res.data))           items = res.data;
+          else if (res && res.data && Array.isArray(res.data.rows)) items = res.data.rows;
+          else if (Array.isArray(res))                   items = res;
+
+          if (!items || items.length === 0) {
+            emit('STOCK_LOG', { text: '✅ Nenhum produto encontrado para deletar.' });
+            chrome.runtime.sendMessage({ type: 'STOCK_DELETE_DONE', deleted: 0, errors: 0 });
+            return;
+          }
+
+          emit('STOCK_LOG', { text: `⚠️ ${items.length} produtos encontrados. Iniciando exclusão...` });
+
+          let deleted = 0;
+          let errors  = 0;
+
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const id   = item.id_store_item || item.id_item || item.id;
+            const nome = item.desc_store_item || item.desc_item || item.name || `#${id}`;
+
+            if (!id) { errors++; continue; }
+
+            try {
+              const delUrl = `https://api.saipos.com/v1/stores/${storeId}/items/${id}`;
+              const delRes = await mainWorldFetch(delUrl, 'DELETE');
+              if (delRes && delRes.error) errors++;
+              else deleted++;
+            } catch(e) {
+              errors++;
+            }
+
+            // Atualiza progresso a cada item
+            emit('STOCK_LOG', { text: `⏳ ${i + 1}/${items.length} — "${nome}"` });
+            chrome.runtime.sendMessage({ type: 'STOCK_PROGRESS', current: i + 1, total: items.length });
+            await sleep(300); // pausa anti-ban entre requests
+          }
+
+          chrome.runtime.sendMessage({ type: 'STOCK_DELETE_DONE', deleted, errors });
+          emit('STOCK_LOG', { text: `✅ <b>Concluído!</b> Deletados: ${deleted} | Erros: ${errors}` });
+
+        } catch(err) {
+          emit('STOCK_LOG', { text: `❌ Erro fatal: ${err.message}` });
+          chrome.runtime.sendMessage({ type: 'STOCK_DELETE_DONE', deleted: 0, errors: 1 });
+        }
+      })();
+      return true;
+    }
+
     if (msg.action === 'IMPORT_CSV') {
       (async () => {
         try {
@@ -1588,9 +1690,13 @@
               if (catMatch) {
                 finalCategoryId = catMatch.id_store_category_item || catMatch.id;
               } else {
-                // Cadastrar nova categoria se não existir
+                // v4.9.0 — Cria categoria que não existe antes de prosseguir
+                emit('CSV_LOG', { text: `⏳ Categoria "${p_categoria}" não encontrada. Criando...` });
                 try {
+                  // Inclui todos os campos de nome possíveis (a API aceita variantes)
                   const newCat = {
+                    desc_store_category_item: p_categoria,
+                    desc_category_item: p_categoria,
                     desc_category: p_categoria,
                     enabled: "Y",
                     online_order: "Y",
@@ -1599,15 +1705,19 @@
                     order: 1
                   };
                   const cRes = await mainWorldFetch(`https://api.saipos.com/v1/stores/${storeId}/category_items`, 'POST', newCat);
-                  if (cRes && !cRes.error && cRes.data) {
-                    finalCategoryId = cRes.data.id_store_category_item || cRes.data.id;
-                    storeCategories.push({
-                      desc_category: p_categoria,
-                      id_store_category_item: finalCategoryId
-                    });
-                    emit('CSV_LOG', { text: `✅ Categoria "${p_categoria}" auto-criada.` });
+                  const newCatId = cRes?.data?.id_store_category_item
+                    || cRes?.data?.id_category_item
+                    || cRes?.data?.id;
+                  if (newCatId) {
+                    finalCategoryId = newCatId;
+                    // Adiciona ao cache local para reusar se aparecer novamente no CSV
+                    storeCategories.push({ desc_store_category_item: p_categoria, id_store_category_item: newCatId });
+                    emit('CSV_LOG', { text: `✅ Categoria "${p_categoria}" criada (ID: ${newCatId}).` });
+                  } else {
+                    emit('CSV_LOG', { text: `⚠️ Falha ao criar categoria "${p_categoria}". Resposta: ${JSON.stringify(cRes || {}).substring(0, 120)}` });
                   }
                 } catch(e) {
+                  emit('CSV_LOG', { text: `❌ Erro ao criar categoria "${p_categoria}": ${e.message}` });
                 }
               }
             }

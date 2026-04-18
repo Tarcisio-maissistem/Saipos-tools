@@ -4,6 +4,10 @@ let allDateRange = null;
 let isRunning = false;
 let isPaused  = false;
 
+// ── Catraca: estado inicial (sobrescrito por loadLockConfig) ──
+const TAB_LABELS = { log: 'LOG', resumo: 'COMISSÕES', happyhour: 'HAPPY HOUR', csv: 'IMPORTAR', estoque: 'ESTOQUE' };
+let lockConfig = { password: '314159', locked: { log: true, csv: true, estoque: true, resumo: false, happyhour: false } };
+
 const $ = id => document.getElementById(id);
 
 // Produtos isentos de comissão/taxa de serviço
@@ -62,13 +66,17 @@ async function checkUrl() {
 }
 
 // ── Tabs ─────────────────────────────────────────────────────
+function switchToTab(tabKey) {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
+  const tabEl = document.querySelector(`.tab[data-tab="${tabKey}"]`);
+  const panelEl = document.getElementById('panel-' + tabKey);
+  if (tabEl) tabEl.classList.add('active');
+  if (panelEl) panelEl.classList.add('active');
+}
+
 document.querySelectorAll('.tab').forEach(t => {
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    document.getElementById('panel-' + t.dataset.tab).classList.add('active');
-  });
+  t.addEventListener('click', () => switchToTab(t.dataset.tab));
 });
 
 // ── Comunicação com content ──────────────────────────────────
@@ -451,6 +459,13 @@ chrome.runtime.onMessage.addListener(msg => {
 // ── Happy Hour Promo Logic ───────────────────────────────
 let hhPromos = [];
 
+// Salva promos em local + sync (dupla persistência — garante recuperação se um falhar)
+async function savePromosToStorage(promos) {
+  const payload = { saipos_happyhour: promos };
+  await chrome.storage.local.set(payload);
+  try { await chrome.storage.sync.set(payload); } catch (e) {} // sync tem limite de quota; ignorar erro
+}
+
 // ── Currency Mask ────────────────────────────────────────
 function applyCurrencyMask(input) {
   input.addEventListener('input', () => {
@@ -561,7 +576,7 @@ async function saveHH() {
       hhPromos.push(newPromo);
     }
     
-    await chrome.storage.local.set({ saipos_happyhour: hhPromos });
+    await savePromosToStorage(hhPromos);
     
     // Limpar form
     $('hhEditId').value = '';
@@ -576,7 +591,20 @@ async function saveHH() {
 
 async function loadPromos() {
   const res = await chrome.storage.local.get('saipos_happyhour');
-  hhPromos = res.saipos_happyhour || [];
+  if (res.saipos_happyhour && res.saipos_happyhour.length > 0) {
+    hhPromos = res.saipos_happyhour;
+  } else {
+    // Fallback: tenta recuperar do sync (cobre reinstalação da extensão)
+    try {
+      const syncRes = await chrome.storage.sync.get('saipos_happyhour');
+      if (syncRes.saipos_happyhour && syncRes.saipos_happyhour.length > 0) {
+        hhPromos = syncRes.saipos_happyhour;
+        await savePromosToStorage(hhPromos); // restaura local
+      } else {
+        hhPromos = [];
+      }
+    } catch (e) { hhPromos = []; }
+  }
   renderPromos();
 }
 
@@ -592,9 +620,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (res.saipos_status.sales) allSales = res.saipos_status.sales;
   }
   
-  const res2 = await chrome.storage.local.get('saipos_happyhour');
-  hhPromos = res2.saipos_happyhour || [];
-  renderPromos();
+  await loadPromos(); // carrega de local ou sync (com fallback automático)
 });
 
 const DAYS_SHORT = ['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SAB'];
@@ -628,7 +654,7 @@ function renderPromos() {
   container.querySelectorAll('.b-del').forEach(btn => {
     btn.addEventListener('click', async () => {
       hhPromos = hhPromos.filter(x => x.id !== btn.dataset.id);
-      await chrome.storage.local.set({ saipos_happyhour: hhPromos });
+      await savePromosToStorage(hhPromos);
       renderPromos();
     });
   });
@@ -661,14 +687,294 @@ function renderPromos() {
       const p = hhPromos.find(x => x.id === btn.dataset.id);
       if (p) {
         p.active = !p.active;
-        await chrome.storage.local.set({ saipos_happyhour: hhPromos });
+        await savePromosToStorage(hhPromos);
         renderPromos();
       }
     });
   });
 }
 
+// ══════════════════════════════════════════════════════════════
+// ESTOQUE — catraca com senha, backup e exclusão em massa
+// ══════════════════════════════════════════════════════════════
+const STOCK_PASSWORD = '314159'; // senha da catraca
+let stockUnlocked = false;
+
+function stockLock() {
+  stockUnlocked = false;
+  $('estoque-locked').style.display  = '';
+  $('estoque-unlocked').style.display = 'none';
+  $('sptPadlock').classList.remove('open'); // fecha o cadeado
+  $('stockPassword').value = '';
+  $('lockError').classList.remove('show');
+  $('stockOpArea').style.display = 'none'; // esconde log anterior
+}
+
+function stockUnlock() {
+  stockUnlocked = true;
+  // Animação do cadeado abrindo
+  $('sptPadlock').classList.add('open');
+  // Pequeno delay para ver a animação antes de trocar o painel
+  setTimeout(() => {
+    $('estoque-locked').style.display   = 'none';
+    $('estoque-unlocked').style.display = '';
+  }, 450);
+}
+
+// Botão "Entrar"
+$('btnUnlock').addEventListener('click', () => {
+  const val = $('stockPassword').value.trim();
+  if (val === STOCK_PASSWORD) {
+    $('lockError').classList.remove('show');
+    stockUnlock();
+  } else {
+    $('lockError').classList.add('show');
+    $('stockPassword').value = '';
+    $('stockPassword').focus();
+  }
+});
+
+// Enter no campo de senha também tenta desbloquear
+$('stockPassword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('btnUnlock').click();
+});
+
+// Botão "Bloquear"
+$('btnLock').addEventListener('click', stockLock);
+
+// ── Backup dos Produtos ───────────────────────────────────────
+$('btnBackup').addEventListener('click', async () => {
+  const btn = $('btnBackup');
+  btn.disabled = true;
+  btn.textContent = '⏳ Carregando...';
+
+  // Exibe log
+  $('stockOpArea').style.display = '';
+  stockLogMsg('🔍 Buscando produtos no Saipos...');
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) throw new Error('Aba do Saipos não encontrada!');
+
+    const res = await chrome.tabs.sendMessage(tab.id, { action: 'BACKUP_PRODUCTS' });
+    if (!res) throw new Error('Sem resposta. Recarregue a página do Saipos.');
+    if (res.error) throw new Error(res.error);
+
+    const { items, storeId, timestamp } = res;
+    stockLogMsg(`✅ ${items.length} produtos encontrados. Baixando...`);
+
+    // Gera CSV + JSON no backup
+    const backupData = {
+      meta: { storeId, timestamp, total: items.length, geradoPor: 'Saipos Tools' },
+      produtos: items.map(x => ({
+        id:        x.id_store_item || x.id_item || x.id,
+        nome:      x.desc_store_item || x.desc_item || x.name || '',
+        preco:     x.variations?.[0]?.price ?? x.price ?? 0,
+        categoria: x.id_store_category_item || '',
+        habilitado: x.enabled || 'Y',
+        _raw: x // objeto completo para restauração futura
+      }))
+    };
+
+    // Download do arquivo JSON
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `backup_estoque_${(timestamp||new Date().toISOString()).split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    stockLogMsg(`💾 Backup salvo: ${items.length} produtos`);
+  } catch (err) {
+    stockLogMsg(`❌ Erro: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Fazer Backup Agora';
+  }
+});
+
+// ── Apagar Todo o Estoque ────────────────────────────────────
+$('btnDeleteAll').addEventListener('click', () => {
+  // Abre overlay de confirmação em vez de confirm() nativo
+  $('stockConfirmOverlay').classList.add('show');
+});
+
+$('btnCancelDelete').addEventListener('click', () => {
+  $('stockConfirmOverlay').classList.remove('show');
+});
+
+$('btnConfirmDelete').addEventListener('click', async () => {
+  $('stockConfirmOverlay').classList.remove('show');
+
+  const btn = $('btnDeleteAll');
+  btn.disabled = true;
+  btn.textContent = '⏳ Deletando...';
+  $('stockOpArea').style.display = '';
+  stockLogMsg('🗑️ Iniciando exclusão de todos os produtos...');
+
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) throw new Error('Aba do Saipos não encontrada!');
+
+    const res = await chrome.tabs.sendMessage(tab.id, { action: 'DELETE_ALL_STOCK' });
+    if (!res) throw new Error('Sem resposta. Recarregue a página do Saipos.');
+    if (res.error) throw new Error(res.error);
+    // res.started === true — o progresso vem via STOCK_LOG + STOCK_DELETE_DONE
+  } catch (err) {
+    stockLogMsg(`❌ Erro: ${err.message}`);
+    btn.disabled = false;
+    btn.textContent = '🗑️ Apagar Todo o Estoque';
+  }
+});
+
+// ── Mensagens de progresso vindas do content ─────────────────
+chrome.runtime.onMessage.addListener(msg => {
+  if (msg.type === 'STOCK_LOG') {
+    stockLogMsg(msg.text);
+  }
+  if (msg.type === 'STOCK_PROGRESS') {
+    const pct = msg.total > 0 ? Math.round(msg.current / msg.total * 100) : 0;
+    $('stockProgFill').style.width = pct + '%';
+    $('stockProgLabel').textContent = `${msg.current} / ${msg.total}`;
+  }
+  if (msg.type === 'STOCK_DELETE_DONE') {
+    const btn = $('btnDeleteAll');
+    btn.disabled = false;
+    btn.textContent = '🗑️ Apagar Todo o Estoque';
+    stockLogMsg(`✅ Concluído — Deletados: ${msg.deleted} | Erros: ${msg.errors}`);
+    $('stockProgFill').style.width = '100%';
+  }
+});
+
+// Adiciona uma linha no log de estoque
+function stockLogMsg(text) {
+  const container = $('stockLogContent');
+  if (!container) return;
+  const line = document.createElement('div');
+  line.innerHTML = text;
+  container.appendChild(line);
+  container.scrollTop = container.scrollHeight; // scroll para o fim
+}
+
+// ══════════════════════════════════════════════════════════════
+// CATRACA DE CONFIGURAÇÕES — controle de acesso por guia
+// ══════════════════════════════════════════════════════════════
+
+const LOCK_KEY = 'saipos_tabs_lock';
+const LOCK_DEFAULTS = {
+  password: '314159',
+  locked: { log: true, csv: true, estoque: true, resumo: false, happyhour: false }
+};
+
+let _lockCallback = null; // callback após senha correta
+
+function applyLockStyles() {
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.style.display = lockConfig.locked[tab.dataset.tab] ? 'none' : ''; // oculta completamente se bloqueada
+  });
+  // Se a aba ativa foi bloqueada, navega para a primeira visível
+  const active = document.querySelector('.tab.active');
+  if (active && lockConfig.locked[active.dataset.tab]) {
+    const first = Array.from(document.querySelectorAll('.tab')).find(t => !lockConfig.locked[t.dataset.tab]);
+    if (first) switchToTab(first.dataset.tab);
+  }
+}
+
+async function loadLockConfig() {
+  try {
+    const data = await chrome.storage.local.get(LOCK_KEY);
+    if (data[LOCK_KEY]) {
+      // Mescla com defaults para garantir campos novos
+      lockConfig.password = data[LOCK_KEY].password || LOCK_DEFAULTS.password;
+      lockConfig.locked   = Object.assign({}, LOCK_DEFAULTS.locked, data[LOCK_KEY].locked || {});
+    }
+  } catch (e) {}
+  applyLockStyles();
+}
+
+async function saveLockConfig() {
+  await chrome.storage.local.set({ [LOCK_KEY]: lockConfig });
+  applyLockStyles();
+}
+
+// Exibe o modal de senha com callback ao acertar
+function showPasswordPrompt(title, sub, onSuccess) {
+  _lockCallback = onSuccess;
+  $('tlbTitle').textContent  = title;
+  $('tlbSub').textContent    = sub;
+  $('tlbPwd').value          = '';
+  $('tlbError').classList.remove('show');
+  $('tabLockOverlay').classList.add('show');
+  setTimeout(() => $('tlbPwd').focus(), 80);
+}
+
+function tryPassword() {
+  const val = $('tlbPwd').value;
+  if (val === lockConfig.password) {
+    $('tabLockOverlay').classList.remove('show');
+    if (_lockCallback) { _lockCallback(); _lockCallback = null; }
+  } else {
+    $('tlbError').classList.add('show');
+    $('tlbPwd').value = '';
+    $('tlbPwd').focus();
+  }
+}
+
+$('tlbConfirm').addEventListener('click', tryPassword);
+$('tlbPwd').addEventListener('keydown', e => { if (e.key === 'Enter') tryPassword(); });
+$('tlbCancel').addEventListener('click', () => {
+  $('tabLockOverlay').classList.remove('show');
+  _lockCallback = null;
+});
+
+// Botão catraca no header — abre config após senha
+$('btnLockConfig').addEventListener('click', () => {
+  showPasswordPrompt('⚙️ Configurações de Acesso', 'Digite a senha de administrador', openLockConfig);
+});
+
+function openLockConfig() {
+  // Monta lista de guias com toggles
+  const container = $('lcTabToggles');
+  container.innerHTML = '';
+  Object.entries(TAB_LABELS).forEach(([key, label]) => {
+    const isLocked = !!lockConfig.locked[key];
+    const row = document.createElement('div');
+    row.className = 'lc-row';
+    row.innerHTML = `
+      <div><div class="lc-name">${label}</div></div>
+      <label class="lc-toggle" title="${isLocked ? 'Bloqueada' : 'Livre'}">
+        <input type="checkbox" data-tab-key="${key}" ${isLocked ? 'checked' : ''}>
+        <span class="lc-slider"></span>
+      </label>`;
+    container.appendChild(row);
+  });
+  $('lcNewPwd').value = '';
+  $('lcSaveMsg').style.display = 'none';
+  $('lockConfigOverlay').classList.add('show');
+}
+
+$('lcSave').addEventListener('click', async () => {
+  // Lê estado dos toggles
+  document.querySelectorAll('#lcTabToggles input[data-tab-key]').forEach(inp => {
+    lockConfig.locked[inp.dataset.tabKey] = inp.checked;
+  });
+  // Altera senha se preenchida
+  const newPwd = $('lcNewPwd').value.trim();
+  if (newPwd) lockConfig.password = newPwd;
+  await saveLockConfig();
+  $('lcSaveMsg').style.display = 'block';
+  setTimeout(() => $('lcSaveMsg').style.display = 'none', 2000);
+});
+
+$('lcClose').addEventListener('click', () => {
+  $('lockConfigOverlay').classList.remove('show');
+});
+
 // ── Init ─────────────────────────────────────────────────────
 checkUrl();
 restoreState();
 initHH();
+loadLockConfig();

@@ -78,9 +78,9 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
 .tabs::-webkit-scrollbar{height:4px}
 .tabs::-webkit-scrollbar-track{background:var(--bg)}
 .tabs::-webkit-scrollbar-thumb{background:var(--bord);border-radius:2px}
-.tab{flex:0 0 auto;padding:10px 14px;text-align:center;font-size:10px;text-transform:uppercase;
-     letter-spacing:.5px;color:var(--muted);cursor:pointer;
-     border-bottom:3px solid transparent;transition:.15s}
+.tab{flex:1 1 0;padding:10px 6px;text-align:center;font-size:10px;text-transform:uppercase;
+     letter-spacing:.3px;color:var(--muted);cursor:pointer;
+     border-bottom:3px solid transparent;transition:.15s;white-space:nowrap}
 .tab.active{color:var(--acc);border-bottom-color:var(--acc)}
 
 /* ─── Painéis ─── */
@@ -138,6 +138,76 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
           letter-spacing:.5px;transition:.15s}
 .btn-test:hover{background:var(--s3);border-color:var(--acc)}
 
+/* ─── Tab Lock System ─── */
+.lock-config-btn{background:none;border:none;cursor:pointer;font-size:15px;padding:5px 7px;
+  border-radius:6px;color:var(--muted);transition:.15s;line-height:1;flex-shrink:0}
+.lock-config-btn:hover{background:var(--s2);color:var(--acc)}
+
+/* ─── Overlay senha / config ─── */
+.spt-lock-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center}
+.spt-lock-overlay.show{display:flex}
+.spt-lock-box{background:var(--s1);border-radius:12px;padding:22px 20px;margin:16px;
+  text-align:center;max-width:280px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+.slb-icon{font-size:28px;margin-bottom:6px;display:block}
+.slb-title{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;
+  color:var(--txt);margin-bottom:4px}
+.slb-sub{font-size:10px;color:var(--muted);margin-bottom:12px;line-height:1.6}
+.slb-btns{display:flex;gap:8px;margin-top:12px}
+
+/* ─── Config lock panel ─── */
+.spt-lock-box.wide{max-width:300px;text-align:left}
+.lc-row{display:flex;align-items:center;justify-content:space-between;
+  padding:9px 0;border-bottom:1px solid var(--bord)}
+.lc-row:last-child{border-bottom:none}
+.lc-name{font-size:12px;font-weight:600;color:var(--txt)}
+.lc-sub{font-size:10px;color:var(--muted)}
+.lc-toggle{position:relative;width:36px;height:20px;flex-shrink:0}
+.lc-toggle input{opacity:0;width:0;height:0;position:absolute}
+.lc-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;
+  background:var(--bord);border-radius:10px;transition:.3s}
+.lc-slider::before{content:'';position:absolute;width:14px;height:14px;left:3px;bottom:3px;
+  background:#fff;border-radius:50%;transition:.3s}
+.lc-toggle input:checked + .lc-slider{background:var(--acc2)}
+.lc-toggle input:checked + .lc-slider::before{transform:translateX(16px)}
+.lc-sec-title{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+  font-weight:700;margin:12px 0 4px}
+
+/* ─── Estoque / Catraca ─── */
+.spt-gate-wrap{display:flex;flex-direction:column;align-items:center;padding:36px 20px 24px;gap:12px;text-align:center}
+.spt-padlock{width:56px;height:66px;position:relative;margin-bottom:4px}
+.spt-shackle{width:34px;height:24px;border:5px solid var(--acc);border-bottom:none;border-radius:17px 17px 0 0;position:absolute;top:0;left:50%;transform:translateX(-50%);transition:transform .45s cubic-bezier(.34,1.56,.64,1),border-color .3s}
+.spt-padlock.open .spt-shackle{transform:translateX(-50%) rotate(-45deg) translate(-5px,-12px);border-color:#4caf50}
+.spt-pbody{width:50px;height:38px;background:var(--acc);border-radius:8px;position:absolute;bottom:0;left:50%;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;transition:background .3s;box-shadow:0 3px 12px rgba(0,163,255,.35)}
+.spt-padlock.open .spt-pbody{background:#4caf50;box-shadow:0 3px 12px rgba(76,175,80,.4)}
+.spt-khole{width:10px;height:16px;position:relative}
+.spt-khole::before{content:'';width:10px;height:10px;background:rgba(255,255,255,.9);border-radius:50%;position:absolute;top:0;left:0}
+.spt-khole::after{content:'';width:4px;height:8px;background:rgba(255,255,255,.9);border-radius:0 0 2px 2px;position:absolute;top:6px;left:3px}
+.spt-gate-title{font-size:14px;font-weight:700;color:var(--txt)}
+.spt-gate-sub{font-size:10px;color:var(--muted);max-width:200px;line-height:1.6}
+.spt-gate-form{display:flex;gap:8px;margin-top:4px;width:100%;max-width:260px}
+.spt-pin{flex:1;padding:9px 12px;border:1px solid var(--bord);border-radius:var(--r);background:var(--s2);color:var(--txt);font-size:16px;letter-spacing:4px;font-family:'IBM Plex Mono',monospace;transition:border-color .2s,box-shadow .2s}
+.spt-pin:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 2px rgba(0,163,255,.15)}
+.spt-pin-err{font-size:10px;color:var(--acc2);display:none;animation:sptShake .4s ease}
+.spt-pin-err.show{display:block}
+@keyframes sptShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+.spt-unlk-hdr{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--s1);border-bottom:1px solid var(--bord);font-size:12px;font-weight:700;color:var(--acc)}
+.spt-act-card{margin:12px 14px;padding:14px;border:1px solid var(--bord);border-radius:8px;background:var(--s1)}
+.spt-act-card.danger{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.04)}
+.spt-card-title{font-size:12px;font-weight:700;margin-bottom:5px}
+.spt-card-desc{font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.6}
+.spt-sprog-wrap{padding:6px 14px}
+.spt-sprog-track{height:3px;background:var(--bord);border-radius:3px;overflow:hidden;margin-bottom:4px}
+.spt-sprog-fill{height:100%;background:var(--acc2);border-radius:3px;transition:width .3s;width:0}
+#stockLogContent{margin:4px 14px 14px;background:var(--s2);border-radius:6px;padding:8px 10px;font-size:10px;font-family:'IBM Plex Mono',monospace;max-height:110px;overflow-y:auto}
+#stockLogContent div{padding:2px 0;border-bottom:1px solid var(--bord)}
+.spt-confirm-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);z-index:999;align-items:center;justify-content:center}
+.spt-confirm-overlay.show{display:flex}
+.spt-confirm-box{background:#fff;border-radius:12px;padding:24px 20px;margin:20px;text-align:center;max-width:280px;box-shadow:0 8px 32px rgba(0,0,0,.25)}
+.spt-confirm-box big{font-size:28px;display:block;margin-bottom:10px}
+.spt-confirm-box h3{font-size:14px;margin-bottom:8px;color:var(--txt)}
+.spt-confirm-box p{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:16px}
+.spt-confirm-btns{display:flex;gap:8px}
 /* ─── Happy Hour ─── */
 .hh-form{padding:20px 16px;background:linear-gradient(135deg, rgba(0,163,255,.05), rgba(2,132,199,.05));border-bottom:1px solid var(--bord);
          backdrop-filter:blur(8px)}
@@ -181,18 +251,20 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
   <div class="logo">O</div>
   <div class="hdr-text">
     <h1>Saipos Tools</h1>
-    <p>API Scraper · conta.saipos.com · <span id="app-version">v4.6.0</span></p>
+    <p>API Scraper · conta.saipos.com · <span id="app-version">v6.41.0</span></p>
   </div>
+  <button id="btnLockConfig" class="lock-config-btn" title="Configurações de Acesso">⚙️🔒</button>
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="log">LOG</div>
-  <div class="tab" data-tab="resumo">COMISSÕES</div>
+  <div class="tab" data-tab="log">LOG</div>
+  <div class="tab active" data-tab="resumo">COMISSÕES</div>
   <div class="tab" data-tab="happyhour">HAPPY HOUR</div>
-  <div class="tab" data-tab="csv">IMPORTAR PROD.</div>
+  <div class="tab" data-tab="csv">IMPORTAR</div>
+  <div class="tab" data-tab="estoque">ESTOQUE</div>
 </div>
 
-<div class="panel active" id="panel-log">
+<div class="panel" id="panel-log">
   <div style="display:flex;justify-content:flex-end;padding:8px 14px;border-bottom:1px solid var(--bord);background:var(--s1);position:sticky;top:0;z-index:9;">
     <button class="btn btn-sm b-tgl" id="btnClearLog">🧹 Limpar Log</button>
   </div>
@@ -202,7 +274,7 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
   </div>
 </div>
 
-<div class="panel" id="panel-resumo">
+<div class="panel active" id="panel-resumo">
   <div class="url-warn" id="urlWarn">
     ⚠️ Acesse <b>conta.saipos.com/#/app/report/sales-by-period</b>, aplique o filtro de datas e clique em INICIAR.
   </div>
@@ -296,6 +368,105 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
       <button class="btn b-stop" id="btnUndoImport" style="width:100%; padding:10px; margin-top:8px; flex-shrink: 0; display:none;">↩️ Desfazer Última Importação</button>
       <div id="undoInfo" style="font-size:11px; color:var(--muted); margin-top:6px; flex-shrink:0; display:none;"></div>
       <div id="csvLogStatus" style="font-size:12px; color:var(--warn); margin-top:10px; flex-shrink: 0;"></div>
+  </div>
+</div>
+
+<!-- ═══ ESTOQUE panel ═══ -->
+<div class="panel" id="panel-estoque">
+
+  <!-- Estado bloqueado: catraca com senha -->
+  <div id="estoque-locked">
+    <div class="spt-gate-wrap">
+      <!-- Cadeado CSS animado -->
+      <div class="spt-padlock" id="sptPadlock">
+        <div class="spt-shackle"></div>
+        <div class="spt-pbody"><div class="spt-khole"></div></div>
+      </div>
+      <div class="spt-gate-title">Área Protegida</div>
+      <div class="spt-gate-sub">Digite a senha para acessar as ferramentas de estoque</div>
+      <div class="spt-gate-form">
+        <input type="password" id="stockPassword" class="spt-pin" placeholder="••••••" maxlength="20" autocomplete="off">
+        <button class="btn b-start" id="btnUnlock" style="padding:9px 14px;font-size:11px">Entrar</button>
+      </div>
+      <div class="spt-pin-err" id="lockError">Senha incorreta. Tente novamente.</div>
+    </div>
+  </div>
+
+  <!-- Estado desbloqueado: ações de estoque -->
+  <div id="estoque-unlocked" style="display:none">
+    <div class="spt-unlk-hdr">
+      <span>🔓 Gestão de Estoque</span>
+      <button class="btn-sm b-tgl" id="btnLock">🔒 Bloquear</button>
+    </div>
+
+    <!-- Card: Backup -->
+    <div class="spt-act-card">
+      <div class="spt-card-title">📦 Backup dos Produtos</div>
+      <div class="spt-card-desc">Baixa um arquivo JSON com todos os produtos do catálogo Saipos e seus respectivos preços.</div>
+      <button class="btn b-report" id="btnBackup" style="width:100%">💾 Fazer Backup Agora</button>
+    </div>
+
+    <!-- Card: Apagar estoque -->
+    <div class="spt-act-card danger">
+      <div class="spt-card-title" style="color:var(--acc2)">⚠️ Apagar Todo o Estoque</div>
+      <div class="spt-card-desc">Remove <strong>TODOS</strong> os produtos do catálogo. Faça o backup antes. Esta ação é irreversível.</div>
+      <button class="btn b-stop" id="btnDeleteAll" style="width:100%">🗑️ Apagar Todo o Estoque</button>
+    </div>
+
+    <!-- Progresso / log da operação -->
+    <div id="stockOpArea" style="display:none">
+      <div class="spt-sprog-wrap">
+        <div class="spt-sprog-track"><div class="spt-sprog-fill" id="stockProgFill"></div></div>
+        <div id="stockProgLabel" style="font-size:10px;color:var(--muted);text-align:right">0 / 0</div>
+      </div>
+      <div id="stockLogContent"></div>
+    </div>
+  </div>
+
+  <!-- Overlay de confirmação (aparece sobre o painel inteiro) -->
+  <div class="spt-confirm-overlay" id="stockConfirmOverlay">
+    <div class="spt-confirm-box">
+      <big>⚠️</big>
+      <h3>Confirmar Exclusão Total</h3>
+      <p>Isso vai apagar <strong>TODOS</strong> os produtos do Saipos.<br>Esta ação <strong>não pode ser desfeita</strong>.<br>Você fez o backup?</p>
+      <div class="spt-confirm-btns">
+        <button class="btn b-stop" id="btnCancelDelete" style="flex:1;padding:10px">Cancelar</button>
+        <button class="btn b-start" id="btnConfirmDelete" style="flex:1;padding:10px;background:var(--acc2)">Sim, Apagar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal: Senha para acessar guia restrita ═══ -->
+<div id="tabLockOverlay" class="spt-lock-overlay">
+  <div class="spt-lock-box">
+    <span class="slb-icon">🔒</span>
+    <div class="slb-title" id="tlbTitle">Área Restrita</div>
+    <div class="slb-sub" id="tlbSub">Digite a senha para acessar esta guia</div>
+    <input type="password" id="tlbPwd" class="spt-pin" placeholder="••••" maxlength="20" autocomplete="off">
+    <div id="tlbError" class="spt-pin-err">Senha incorreta. Tente novamente.</div>
+    <div class="slb-btns">
+      <button class="btn b-stop" id="tlbCancel" style="flex:1;padding:9px">Cancelar</button>
+      <button class="btn b-start" id="tlbConfirm" style="flex:1;padding:9px">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Modal: Configurações de acesso (admin) ═══ -->
+<div id="lockConfigOverlay" class="spt-lock-overlay">
+  <div class="spt-lock-box wide">
+    <div class="slb-title" style="text-align:center;margin-bottom:12px">⚙️ Controle de Acesso</div>
+    <div class="lc-sec-title">Guias restritas (exigem senha)</div>
+    <div id="lcTabToggles"></div>
+    <div class="lc-sec-title" style="margin-top:14px">Alterar Senha</div>
+    <input type="password" id="lcNewPwd" class="spt-pin" style="width:100%;letter-spacing:2px;font-size:14px;margin-bottom:4px"
+      placeholder="Nova senha (vazio = manter)" maxlength="20" autocomplete="new-password">
+    <div style="font-size:10px;color:var(--muted)">Senha padrão: <b>314159</b></div>
+    <div id="lcSaveMsg" style="font-size:10px;color:#4caf50;display:none;margin-top:6px">✅ Configurações salvas!</div>
+    <div class="slb-btns" style="margin-top:14px">
+      <button class="btn b-stop" id="lcClose" style="flex:1;padding:9px">Fechar</button>
+      <button class="btn b-start" id="lcSave" style="flex:1;padding:9px">Salvar</button>
+    </div>
   </div>
 </div>
 
