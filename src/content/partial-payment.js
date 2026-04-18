@@ -14,7 +14,7 @@
   window.__saiposPartialPaymentActive = true;
 
   const STORE_CACHE_KEY = 'saipos_store_info_cache';
-  const SPT_VERSION = 'v6.41.0'; // versão exibida no rodapé do cupom impresso
+  const SPT_VERSION = 'v6.42.0'; // versão exibida no rodapé do cupom impresso
 
   // StoreId detectado pelo interceptor via XHR/fetch (fallback para clientes sem /stores/ na URL)
   let detectedStoreId = null;
@@ -677,10 +677,10 @@
     return Array.from(map.values());
   }
 
-  function buildPrintRows(data, storeInfo) {
-    // v6.21.0 — layout idêntico ao SAIPOS nativo: 44 cols, prefixo </ae>, <a> nos itens
-    // Qt(6) + Nome(23) + Unit(7) + Valor(8) = 44 cols
-    const COLS   = 44;
+  function buildPrintRows(data, storeInfo, cols) {
+    // v6.21.0 — layout idêntico ao SAIPOS nativo: prefixo </ae>, <a> nos itens
+    // Qt(6) + Nome(?) + Unit(7) + Valor(8) = COLS total (configurável)
+    const COLS   = cols || 44; // largura configurável — padrão 44 (SAIPOS nativo)
     const AE     = '</ae>';  // prefixo left-align (padrão SAIPOS nativo)
     const QTY_W  = 6;        // mesmo que SAIPOS nativo
     const UNIT_W = 7;        // coluna valor unitário (nosso acréscimo)
@@ -792,18 +792,19 @@
     return rows;
   }
 
-  function buildSaiposprtJSON(data, storeInfo) {
+  function buildSaiposprtJSON(data, storeInfo, cols) {
     // Use o saleId como fileName (igual ao SAIPOS nativo)
     const saleId = data.saleId || String(Date.now());
     const fileName = saleId + '.saiposprt';
     const idUser = data._idUser || 0;
-    const printRows = buildPrintRows(data, storeInfo);
+    const COLS = cols || 44; // repassa para printSettings.rowColumns
+    const printRows = buildPrintRows(data, storeInfo, COLS);
 
     const doc = [{
       printSettings: {
         type: 0, printDelivery: 1, printTable: 1, printServiceTicket: 1,
-        layout: 2, rowColumns: 44, copies: 1, emptyLines: 3, emptyChar: ' ',
-        fontSize: 11, cashierPrintZeroedValueItems: 1, printTableCancelItem: 0, // v6.21.0: 44 cols, fontSize 11 (igual SAIPOS nativo)
+        layout: 2, rowColumns: COLS, copies: 1, emptyLines: 3, emptyChar: ' ',
+        fontSize: 11, cashierPrintZeroedValueItems: 1, printTableCancelItem: 0, // fontSize 11 (igual SAIPOS nativo)
         groupItemsQuantity: 0, printEscposModel: 2, showPaymentDetailPrintingAndApp: 0,
         escpos: true, idStore: parseInt(storeInfo.idStore) || 0, printPath: '',
         guid: uuid(), id_user: idUser, fileName
@@ -823,7 +824,13 @@
   }
 
   async function downloadSaiposprt(data, storeInfo) {
-    const { json, fileName } = buildSaiposprtJSON(data, storeInfo);
+    // Lê largura configurada no painel — padrão 44 (SAIPOS nativo)
+    let printerCols = 44;
+    try {
+      const c = await chrome.storage.local.get('saipos_printer_cols');
+      if (c.saipos_printer_cols) printerCols = parseInt(c.saipos_printer_cols) || 44;
+    } catch (e) {}
+    const { json, fileName } = buildSaiposprtJSON(data, storeInfo, printerCols);
     const jsonStr = JSON.stringify(json);
     // btoa() codifica como Latin-1 (1 byte por char) — compatível com SAIPOS Printer
     const base64 = btoa(jsonStr);

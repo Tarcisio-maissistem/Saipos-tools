@@ -864,6 +864,8 @@ function stockLogMsg(text) {
 // ══════════════════════════════════════════════════════════════
 
 const LOCK_KEY = 'saipos_tabs_lock';
+const PRINTER_COLS_KEY = 'saipos_printer_cols';
+let currentPrinterCols = 44; // largura da impressora em colunas (padrão SAIPOS)
 const LOCK_DEFAULTS = {
   password: '314159',
   locked: { log: true, csv: true, estoque: true, resumo: false, happyhour: false }
@@ -885,12 +887,13 @@ function applyLockStyles() {
 
 async function loadLockConfig() {
   try {
-    const data = await chrome.storage.local.get(LOCK_KEY);
+    const data = await chrome.storage.local.get([LOCK_KEY, PRINTER_COLS_KEY]);
     if (data[LOCK_KEY]) {
       // Mescla com defaults para garantir campos novos
       lockConfig.password = data[LOCK_KEY].password || LOCK_DEFAULTS.password;
       lockConfig.locked   = Object.assign({}, LOCK_DEFAULTS.locked, data[LOCK_KEY].locked || {});
     }
+    if (data[PRINTER_COLS_KEY]) currentPrinterCols = parseInt(data[PRINTER_COLS_KEY]) || 44;
   } catch (e) {}
   applyLockStyles();
 }
@@ -953,6 +956,9 @@ function openLockConfig() {
   });
   $('lcNewPwd').value = '';
   $('lcSaveMsg').style.display = 'none';
+  // Sincroniza select com valor atual
+  const colsSel = $('lcPrinterCols');
+  if (colsSel) colsSel.value = String(currentPrinterCols);
   $('lockConfigOverlay').classList.add('show');
 }
 
@@ -961,6 +967,12 @@ $('lcSave').addEventListener('click', async () => {
   document.querySelectorAll('#lcTabToggles input[data-tab-key]').forEach(inp => {
     lockConfig.locked[inp.dataset.tabKey] = inp.checked;
   });
+  // Salva largura da impressora
+  const colsSel = $('lcPrinterCols');
+  if (colsSel) {
+    currentPrinterCols = parseInt(colsSel.value) || 44;
+    await chrome.storage.local.set({ [PRINTER_COLS_KEY]: currentPrinterCols });
+  }
   // Altera senha se preenchida
   const newPwd = $('lcNewPwd').value.trim();
   if (newPwd) lockConfig.password = newPwd;
