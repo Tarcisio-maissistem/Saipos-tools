@@ -14,7 +14,7 @@
   window.__saiposPartialPaymentActive = true;
 
   const STORE_CACHE_KEY = 'saipos_store_info_cache';
-  const SPT_VERSION = 'v6.43.1'; // versão exibida no rodapé do cupom impresso
+  const SPT_VERSION = 'v6.43.2'; // versão exibida no rodapé do cupom impresso
 
   // StoreId detectado pelo interceptor via XHR/fetch (fallback para clientes sem /stores/ na URL)
   let detectedStoreId = null;
@@ -707,10 +707,9 @@
     rows.push('</ce><n><e>RESUMO DA CONTA</e></n>');
     rows.push('</ad>' + formatDateShort(new Date()));
 
-    // Info da comanda — <n><e> = bold+enlarged nos campos principais
-    if (data.identificacao) rows.push(AE + '<n><e>Identifica\u00E7\u00E3o: ' + data.identificacao + '</e></n>');
-    rows.push(AE + '<n><e>Mesa: ' + data.mesa + '</e></n>');       // linha separada para não estourar colunas
-    rows.push(AE + '<n><e>Comanda: ' + data.comanda + '</e></n>');
+    // Info da comanda — identificação normal; Mesa+Comanda em bold+enlarged na mesma linha
+    if (data.identificacao) rows.push(AE + 'Identifica\u00E7\u00E3o: ' + data.identificacao);
+    rows.push(AE + '<n><e>Mesa: ' + data.mesa + ' - Comanda: ' + data.comanda + '</e></n>');
     if (data.garcom) rows.push(AE + 'Gar\u00E7om: ' + data.garcom);
 
     rows.push('</linha_simples>');
