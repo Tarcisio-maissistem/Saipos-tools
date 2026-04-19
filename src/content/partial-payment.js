@@ -14,7 +14,7 @@
   window.__saiposPartialPaymentActive = true;
 
   const STORE_CACHE_KEY = 'saipos_store_info_cache';
-  const SPT_VERSION = 'v6.42.0'; // versão exibida no rodapé do cupom impresso
+  const SPT_VERSION = 'v6.43.0'; // versão exibida no rodapé do cupom impresso
 
   // StoreId detectado pelo interceptor via XHR/fetch (fallback para clientes sem /stores/ na URL)
   let detectedStoreId = null;
@@ -707,9 +707,9 @@
     rows.push('</ce><n><e>RESUMO DA CONTA</e></n>');
     rows.push('</ad>' + formatDateShort(new Date()));
 
-    // Info da comanda com prefixo </ae> (igual SAIPOS nativo)
-    if (data.identificacao) rows.push(AE + 'Identifica\u00E7\u00E3o: ' + data.identificacao);
-    rows.push(AE + 'Mesa: ' + data.mesa + ' - Comanda: ' + data.comanda);
+    // Info da comanda — bold nos campos principais para melhor visualização
+    if (data.identificacao) rows.push(AE + '<n>Identifica\u00E7\u00E3o: ' + data.identificacao + '</n>');
+    rows.push(AE + '<n>Mesa: ' + data.mesa + ' - Comanda: ' + data.comanda + '</n>');
     if (data.garcom) rows.push(AE + 'Gar\u00E7om: ' + data.garcom);
 
     rows.push('</linha_simples>');
@@ -772,13 +772,17 @@
       const saldo = data.totalGeral - totalPago;
       if (saldo > 0.01) {
         const sStr = formatBRL(saldo);
-        rows.push('</ce><n>' + padR('FALTA PAGAR(=)', COLS - sStr.length) + sStr + '</n>');
+        // Label em bold + valor em bold+enlarged na linha seguinte (destaque máximo)
+        rows.push('</ce><n>FALTA PAGAR(=)</n>');
+        rows.push('</ce><n><e>' + sStr + '</e></n>');
       } else {
         rows.push('</ce><n>CONTA PAGA INTEGRALMENTE</n>');
       }
     } else {
       const sStr = formatBRL(data.totalGeral);
-      rows.push('</ce><n>' + padR('FALTA PAGAR(=)', COLS - sStr.length) + sStr + '</n>');
+      // Label em bold + valor em bold+enlarged na linha seguinte (destaque máximo)
+      rows.push('</ce><n>FALTA PAGAR(=)</n>');
+      rows.push('</ce><n><e>' + sStr + '</e></n>');
     }
 
     rows.push('</linha_simples>');
