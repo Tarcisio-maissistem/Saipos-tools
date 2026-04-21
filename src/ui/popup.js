@@ -6,7 +6,7 @@ let isPaused  = false;
 
 // ── Catraca: estado inicial (sobrescrito por loadLockConfig) ──
 const TAB_LABELS = { log: 'LOG', resumo: 'COMISSÕES', happyhour: 'HAPPY HOUR', csv: 'IMPORTAR', entrega: 'ENTREGA', estoque: 'ESTOQUE' };
-let lockConfig = { password: '314159', locked: { log: true, csv: true, estoque: true, resumo: false, happyhour: false, entrega: false } };
+let lockConfig = { password: '314159', locked: { log: false, csv: true, estoque: true, resumo: false, happyhour: false, entrega: false } };
 
 const $ = id => document.getElementById(id);
 
@@ -211,7 +211,7 @@ $('bDeliveryReport').addEventListener('click', async () => {
   let storeName = 'Loja Saipos';
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab) {
+    if (tab && tab.url && tab.url.includes('conta.saipos.com')) { // só executa em tab do Saipos
       const res = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => {
@@ -260,20 +260,25 @@ $('bReport').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
 
-  // Extrai nome da loja do Saipos
-  const storeResult = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => {
-      const span = document.querySelector('span.tm-label[uib-tooltip]');
-      if (span) {
-        const tooltip = span.getAttribute('uib-tooltip');
-        if (tooltip) return tooltip;
-      }
-      if (span) return span.textContent.trim();
-      return 'Loja Saipos';
-    }
-  });
-  const storeName = storeResult && storeResult[0] && storeResult[0].result ? storeResult[0].result : 'Loja Saipos';
+  // Extrai nome da loja do Saipos (só executa em tab do Saipos)
+  let storeName = 'Loja Saipos';
+  if (tab.url && tab.url.includes('conta.saipos.com')) {
+    try {
+      const storeResult = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          const span = document.querySelector('span.tm-label[uib-tooltip]');
+          if (span) {
+            const tooltip = span.getAttribute('uib-tooltip');
+            if (tooltip) return tooltip;
+          }
+          if (span) return span.textContent.trim();
+          return null;
+        }
+      });
+      if (storeResult && storeResult[0] && storeResult[0].result) storeName = storeResult[0].result;
+    } catch (_) {}
+  }
 
   // Salva dados no storage para a página de relatório
   await chrome.storage.local.set({
@@ -1018,7 +1023,7 @@ const PRINTER_COLS_KEY = 'saipos_printer_cols';
 let currentPrinterCols = 44; // largura da impressora em colunas (padrão SAIPOS)
 const LOCK_DEFAULTS = {
   password: '314159',
-  locked: { log: true, csv: true, estoque: true, resumo: false, happyhour: false }
+  locked: { log: false, csv: true, estoque: true, resumo: false, happyhour: false, entrega: false } // log habilitado por padrão
 };
 
 let _lockCallback = null; // callback após senha correta
@@ -1128,7 +1133,11 @@ $('lcSave').addEventListener('click', async () => {
   if (newPwd) lockConfig.password = newPwd;
   await saveLockConfig();
   $('lcSaveMsg').style.display = 'block';
-  setTimeout(() => $('lcSaveMsg').style.display = 'none', 2000);
+  setTimeout(() => {
+    $('lcSaveMsg').style.display = 'none';
+    $('lockConfigOverlay').classList.remove('show'); // fecha o overlay
+    switchToTab('resumo'); // volta para tela principal
+  }, 1500);
 });
 
 $('lcClose').addEventListener('click', () => {
