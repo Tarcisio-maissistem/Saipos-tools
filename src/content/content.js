@@ -294,7 +294,7 @@
     status:     ['status', 'estado', 'situacao', 'desc_sale_status', 'id_sale_status', 'sale_status'],
     items:      ['itens', 'items', 'produtos', 'products', 'sale_items', 'saleItems', 'detalhes', 'sale_items_data'],
     saleType:   ['id_sale_type', 'sale_type', 'saleType', 'tipo_venda', 'id_type', 'type'],
-    entregador: ['desc_delivery_man', 'delivery_man', 'deliveryMan', 'entregador', 'driver', 'courier']
+    entregador: ['delivery_man_name', 'desc_delivery_man', 'delivery_man', 'deliveryMan', 'entregador', 'driver', 'courier']
   };
 
   const ITEM_ALIASES = {
@@ -393,12 +393,6 @@
 
     // ── Entregador: lives inside raw.delivery sub-object on Saipos API ──
     let entregador = String(getField(raw, saleMap, 'entregador', '') || '').trim();
-    // DEBUG — loga estrutura do delivery apenas para vendas tipo 1 (delivery)
-    if (!entregador && saleType === 1) {
-      console.log('[SPT-DELIVERY] mapSale saleId=' + (raw.id_sale || raw.id) +
-        ' — raw.delivery:', (JSON.stringify(raw.delivery) || '{}').substring(0, 400),
-        '| raw keys com delivery/entregador:', Object.keys(raw).filter(k => /deliver|entregador|waiter|employee/i.test(k)));
-    }
     if (!entregador) {
       const delObj = raw.delivery || raw.deliveryMan || null;
       if (delObj && typeof delObj === 'object') {
@@ -1888,18 +1882,6 @@
           const saleIds = msg.saleIds || [];
           if (!saleIds.length) return sendResponse({ results: [] });
 
-          console.log('[SPT-DELIVERY] FETCH_DELIVERY_MAN iniciado — storeId:', storeId, '| saleIds:', saleIds);
-
-          // Busca apenas a PRIMEIRA venda para debug da estrutura
-          const debugUrl = `https://api.saipos.com/v1/stores/${storeId}/sales/${saleIds[0]}`;
-          const debugData = await mainWorldFetch(debugUrl);
-          console.log('[SPT-DELIVERY] Resposta bruta (primeira venda):', JSON.stringify(debugData).substring(0, 1500));
-
-          // Log estrutura do campo delivery especificamente
-          const debugSale = debugData && (debugData.data || debugData);
-          console.log('[SPT-DELIVERY] debugSale.delivery:', JSON.stringify(debugSale && debugSale.delivery));
-          console.log('[SPT-DELIVERY] Todas as chaves do sale:', debugSale ? Object.keys(debugSale) : 'null');
-
           // Busca em paralelo em lotes de 8 para não sobrecarregar a API
           const results = [];
           const BATCH = 8;
@@ -1915,44 +1897,21 @@
                 }
 
                 const sale = data.data || data;
-                const del = sale.delivery || {};
-
-                // Log completo do objeto delivery para cada venda
-                console.log('[SPT-DELIVERY] saleId', saleId, '— delivery keys:', Object.keys(del),
-                  '| delivery JSON:', (JSON.stringify(del) || '{}').substring(0, 400));
-
+                // API individual usa sale_delivery (não delivery)
+                const del = sale.sale_delivery || sale.delivery || {};
                 let ent = '';
 
-                // employee é a fonte mais comum no Saipos
-                if (del.employee && typeof del.employee === 'object') {
-                  console.log('[SPT-DELIVERY] del.employee keys:', Object.keys(del.employee));
+                // 1. delivery_man_name na raiz do sale (confirmado pelo debug)
+                if (!ent) ent = String(sale.delivery_man_name || '').trim();
+                // 2. dentro de sale_delivery
+                if (!ent && del.employee && typeof del.employee === 'object') {
                   ent = del.employee.desc_employee || del.employee.name || '';
                 }
-                if (!ent) ent = del.desc_delivery_man || del.name || del.deliveryman || '';
+                if (!ent) ent = del.desc_delivery_man || del.delivery_man_name || del.name || del.deliveryman || '';
                 if (!ent && del.delivery_man && typeof del.delivery_man === 'object') {
                   ent = del.delivery_man.name || del.delivery_man.desc_employee || '';
                 }
-                // Busca recursiva em todos os campos do delivery
-                if (!ent) {
-                  const deepSearch = (obj, depth) => {
-                    if (!obj || typeof obj !== 'object' || depth > 3) return '';
-                    for (const [k, v] of Object.entries(obj)) {
-                      if (typeof v === 'string' && v.length > 1 && v.length < 80 &&
-                          /name|desc|employee|entregador|driver|courier/i.test(k)) {
-                        console.log('[SPT-DELIVERY] deepSearch hit — key:', k, 'value:', v);
-                        return v;
-                      }
-                      if (v && typeof v === 'object') {
-                        const r = deepSearch(v, depth + 1);
-                        if (r) return r;
-                      }
-                    }
-                    return '';
-                  };
-                  ent = deepSearch(del, 0);
-                }
 
-                console.log('[SPT-DELIVERY] saleId', saleId, '— entregador encontrado:', ent || '(vazio)');
                 return { saleId: String(saleId), entregador: String(ent).trim() };
               } catch(e) {
                 console.log('[SPT-DELIVERY] Exceção saleId', saleId, ':', e.message);
@@ -1961,10 +1920,8 @@
             }));
             results.push(...batchRes);
           }
-          console.log('[SPT-DELIVERY] Resultados finais:', JSON.stringify(results));
           sendResponse({ results });
         } catch(err) {
-          console.log('[SPT-DELIVERY] Erro geral:', err.message);
           sendResponse({ error: err.message, results: [] });
         }
       })();
