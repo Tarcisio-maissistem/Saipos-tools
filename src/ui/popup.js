@@ -437,8 +437,7 @@ async function restoreState() {
       setProgress(state.progress.current || 0, state.progress.total || state.total || 0);
       setStatus('run', `[${state.progress.current || 0}/${state.progress.total || state.total || 0}] ${state.progress.msg || 'Processando...'}`);
       setButtons(true);
-      $('panel-resumo').innerHTML = '<div class="empty"><big>👤</big>Processando...</div>';
-      $('panel-alertas').innerHTML = '<div class="empty"><big>⚠️</big>Processando...</div>';
+      $('resumo-content').innerHTML = '<div class="empty"><big>👤</big>Processando...</div>';
       
       if (isPaused) {
         $('bPause').textContent = '▶ RETOMAR';
