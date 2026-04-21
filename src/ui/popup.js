@@ -1,12 +1,12 @@
-// popup.js
+﻿// popup.js
 let allSales = [];
 let allDateRange = null;
 let isRunning = false;
 let isPaused  = false;
 
 // ── Catraca: estado inicial (sobrescrito por loadLockConfig) ──
-const TAB_LABELS = { log: 'LOG', resumo: 'COMISSÕES', happyhour: 'HAPPY HOUR', csv: 'IMPORTAR', estoque: 'ESTOQUE' };
-let lockConfig = { password: '314159', locked: { log: true, csv: true, estoque: true, resumo: false, happyhour: false } };
+const TAB_LABELS = { log: 'LOG', resumo: 'COMISSÕES', happyhour: 'HAPPY HOUR', csv: 'IMPORTAR', entrega: 'ENTREGA', estoque: 'ESTOQUE' };
+let lockConfig = { password: '314159', locked: { log: true, csv: true, estoque: true, resumo: false, happyhour: false, entrega: false } };
 
 const $ = id => document.getElementById(id);
 
@@ -55,6 +55,8 @@ function setButtons(running) {
   $('bPause').disabled  = !running;
   $('bStop').disabled   = !running;
   $('bReport').disabled =  running || allSales.length === 0;
+  const delBtn = $('bDeliveryReport');
+  if (delBtn) delBtn.disabled = running || allSales.length === 0;
 }
 
 // ── Check URL ────────────────────────────────────────────────
@@ -158,7 +160,43 @@ $('btnClearLog').addEventListener('click', () => {
   if (lc) lc.innerHTML = '<div class="empty"><big>🤖</big>Log limpo.</div>';
 });
 
-// ── RELATÓRIO ────────────────────────────────────────────────
+// ── RELATÓRIO ENTREGAS ─────────────────────────────────────────────
+$('bDeliveryReport').addEventListener('click', async () => {
+  if (allSales.length === 0) return;
+
+  // Extrai nome da loja do DOM (mesmo método do relatório de comissões)
+  let storeName = 'Loja Saipos';
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      const res = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          const span = document.querySelector('span.tm-label[uib-tooltip]');
+          return span ? span.textContent.trim() : null;
+        }
+      });
+      if (res && res[0] && res[0].result) storeName = res[0].result;
+    }
+  } catch (_) {}
+
+  // Filter: only delivery type (saleType === 1) and NOT canceled
+  const deliverySales = allSales.filter(s => !s.canceled && s.saleType === 1);
+
+  if (deliverySales.length === 0) {
+    // Fallback: saleType não capturado — exibe todas as vendas com aviso
+    const concluded = allSales.filter(s => !s.canceled);
+    await chrome.storage.local.set({
+      saiposDeliveryData: { sales: concluded, storeName, dateRange: allDateRange, fallback: true }
+    });
+  } else {
+    await chrome.storage.local.set({
+      saiposDeliveryData: { sales: deliverySales, storeName, dateRange: allDateRange, fallback: false }
+    });
+  }
+
+  chrome.tabs.create({ url: chrome.runtime.getURL('pages/delivery-report.html') });
+});
 $('bReport').addEventListener('click', async () => {
   if (allSales.length === 0) return;
 
@@ -453,6 +491,57 @@ chrome.runtime.onMessage.addListener(msg => {
     // v6.6.0 — atualiza botão desfazer após importação ou undo
     if (msg.type === 'IMPORT_DONE' || msg.type === 'UNDO_DONE') {
         checkUndoAvailable();
+    }
+    // Delivery import log
+    if (msg.type === 'DELIVERY_LOG') {
+        const logStatus = $('deliveryLogStatus');
+        if (logStatus) logStatus.innerHTML = msg.text;
+    }
+});
+
+// ── IMPORTAR TAXAS DE ENTREGA ────────────────────────────────
+$('btnImportDelivery').addEventListener('click', async () => {
+    const textarea = $('deliveryCsvInput');
+    const logStatus = $('deliveryLogStatus');
+    const text = textarea.value.trim();
+
+    if (!text) {
+        logStatus.innerHTML = '❌ Cole a lista de bairros e valores primeiro!';
+        return;
+    }
+
+    const rows = text.split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0 && l.includes(','));
+
+    if (rows.length === 0) {
+        logStatus.innerHTML = '❌ Formato inválido. Use: <code>Bairro,10.00</code> por linha.';
+        return;
+    }
+
+    logStatus.innerHTML = `⏳ Preparando importação de ${rows.length} bairros...`;
+
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) {
+            logStatus.innerHTML = '❌ Aba do Saipos não encontrada!';
+            return;
+        }
+        if (!tab.url || !tab.url.includes('conta.saipos.com')) {
+            logStatus.innerHTML = '❌ Acesse <b>conta.saipos.com/#/app/store/delivery-area</b> primeiro.';
+            return;
+        }
+
+        const res = await chrome.tabs.sendMessage(tab.id, { action: 'IMPORT_DELIVERY', rows }).catch(() => null);
+        if (res && res.error) {
+            logStatus.innerHTML = '❌ ' + res.error;
+        } else if (res && res.started) {
+            logStatus.innerHTML = `🛵 Importação iniciada! ${rows.length} bairros na fila...`;
+        } else {
+            logStatus.innerHTML = '❌ Sem resposta. Recarregue a página do Saipos e tente novamente.';
+        }
+    } catch (err) {
+        logStatus.innerHTML = '❌ Erro: ' + err.message;
     }
 });
 

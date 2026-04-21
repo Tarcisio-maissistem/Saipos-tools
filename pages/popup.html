@@ -59,7 +59,7 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
 #progLabel{font-size:10px;color:var(--muted);text-align:right}
 
 /* ─── Botões ─── */
-.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--bord)}
+.btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:14px 16px;background:var(--bg);border-bottom:1px solid var(--bord)}
 .btn{padding:10px 8px;border:none;border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;
      font-size:11px;font-weight:700;cursor:pointer;transition:.15s;letter-spacing:.3px;text-align:center}
 .btn:active{transform:scale(.97)}
@@ -251,7 +251,7 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
   <div class="logo">O</div>
   <div class="hdr-text">
     <h1>Saipos Tools</h1>
-    <p>API Scraper · conta.saipos.com · <span id="app-version">v6.41.0</span></p>
+    <p>API Scraper · conta.saipos.com · <span id="app-version">v6.45.0</span></p>
   </div>
   <button id="btnLockConfig" class="lock-config-btn" title="Configurações de Acesso">⚙️🔒</button>
 </div>
@@ -261,6 +261,7 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
   <div class="tab active" data-tab="resumo">COMISSÕES</div>
   <div class="tab" data-tab="happyhour">HAPPY HOUR</div>
   <div class="tab" data-tab="csv">IMPORTAR</div>
+  <div class="tab" data-tab="entrega">ENTREGA</div>
   <div class="tab" data-tab="estoque">ESTOQUE</div>
 </div>
 
@@ -300,6 +301,7 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
     <button class="btn b-pause"  id="bPause" disabled>⏸ PAUSAR</button>
     <button class="btn b-stop"   id="bStop"  disabled>■ PARAR</button>
     <button class="btn b-report" id="bReport" disabled>📄 RELATÓRIO</button>
+    <button class="btn b-report" id="bDeliveryReport" disabled style="background:#0e7490;color:#fff;grid-column:span 2">🛵 REL. ENTREGA</button>
   </div>
   
   <div id="resumo-content">
@@ -368,6 +370,18 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
       <button class="btn b-stop" id="btnUndoImport" style="width:100%; padding:10px; margin-top:8px; flex-shrink: 0; display:none;">↩️ Desfazer Última Importação</button>
       <div id="undoInfo" style="font-size:11px; color:var(--muted); margin-top:6px; flex-shrink:0; display:none;"></div>
       <div id="csvLogStatus" style="font-size:12px; color:var(--warn); margin-top:10px; flex-shrink: 0;"></div>
+  </div>
+</div>
+
+<!-- ═══ ENTREGA panel ═══ -->
+<div class="panel" id="panel-entrega">
+  <div style="padding:16px;display:flex;flex-direction:column;height:100%;">
+    <b style="font-size:14px;color:var(--acc);">🛵 Taxas de Entrega por Bairro</b><br/>
+    <i style="color:var(--muted);font-size:11px;margin-top:3px;">Cole o CSV: <code>nome_bairro,valor</code> — uma linha por bairro.</i>
+    <i style="color:var(--muted);font-size:10px;">Ex: <code>Água Santa,10.00</code> ou <code>Jardim América,R$12,00</code></i>
+    <textarea id="deliveryCsvInput" placeholder="Água Santa,10.00&#10;Jardim América,12.00&#10;Nova Aliança,20.00" style="flex:1;margin-top:10px;width:100%;border:1px solid var(--bord);padding:8px;border-radius:4px;font-family:'IBM Plex Mono',monospace;font-size:11px;resize:none;background:var(--s2);color:var(--txt);"></textarea>
+    <button class="btn b-start" id="btnImportDelivery" style="width:100%;padding:10px;margin-top:10px;flex-shrink:0;">🛵 IMPORTAR TAXAS</button>
+    <div id="deliveryLogStatus" style="font-size:11px;color:var(--muted);margin-top:8px;flex-shrink:0;line-height:1.7;"></div>
   </div>
 </div>
 

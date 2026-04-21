@@ -282,17 +282,19 @@
 
   // ── Field Mapping ───────────────────────────────────────────
   const SALE_ALIASES = {
-    id:       ['id_sale', 'id', '_id', 'sale_id', 'saleId', 'codigo', 'code', 'numero', 'number_sale', 'sale_number'],
-    mesa:     ['mesa', 'table_number', 'tableNumber', 'numero_mesa', 'num_mesa', 'desc_table', 'number_table'],
-    comanda:  ['comanda', 'order_number', 'orderNumber', 'numero_comanda', 'command', 'num_comanda', 'number_order_card', 'order_card'],
-    date:     ['data', 'date', 'created_at', 'createdAt', 'data_venda', 'datetime', 'dateTime', 'data_criacao'],
-    payment:  ['forma_pagamento', 'payment_method', 'paymentMethod', 'pagamento', 'payment', 'tipo_pagamento', 'desc_payment_type', 'payment_type', 'desc_partner_sale'],
-    subtotal: ['total_amount_items', 'total_itens', 'totalItens', 'subtotal', 'items_total', 'itemsTotal', 'products_total', 'valor_produtos', 'valor_itens', 'total_items_value'],
-    taxa:     ['total_increase', 'taxa_servico', 'service_fee', 'serviceFee', 'taxa', 'tax', 'service_tax', 'taxa_de_servico', 'service_charge', 'service_charge_value', 'total_service_fee'],
-    total:    ['total_value', 'totalValue', 'valor_total', 'grand_total', 'total_sale', 'amount', 'total_amount'],
-    canceled: ['cancelado', 'canceled', 'cancelled', 'is_canceled', 'isCanceled', 'is_cancelled', 'is_deleted', 'deleted_at'],
-    status:   ['status', 'estado', 'situacao', 'desc_sale_status', 'id_sale_status', 'sale_status'],
-    items:    ['itens', 'items', 'produtos', 'products', 'sale_items', 'saleItems', 'detalhes', 'sale_items_data']
+    id:         ['id_sale', 'id', '_id', 'sale_id', 'saleId', 'codigo', 'code', 'numero', 'number_sale', 'sale_number'],
+    mesa:       ['mesa', 'table_number', 'tableNumber', 'numero_mesa', 'num_mesa', 'desc_table', 'number_table'],
+    comanda:    ['comanda', 'order_number', 'orderNumber', 'numero_comanda', 'command', 'num_comanda', 'number_order_card', 'order_card'],
+    date:       ['data', 'date', 'created_at', 'createdAt', 'data_venda', 'datetime', 'dateTime', 'data_criacao'],
+    payment:    ['forma_pagamento', 'payment_method', 'paymentMethod', 'pagamento', 'payment', 'tipo_pagamento', 'desc_partner_sale'],
+    subtotal:   ['total_amount_items', 'total_itens', 'totalItens', 'subtotal', 'items_total', 'itemsTotal', 'products_total', 'valor_produtos', 'valor_itens', 'total_items_value'],
+    taxa:       ['total_increase', 'taxa_servico', 'service_fee', 'serviceFee', 'taxa', 'tax', 'service_tax', 'taxa_de_servico', 'service_charge', 'service_charge_value', 'total_service_fee'],
+    total:      ['total_value', 'totalValue', 'valor_total', 'grand_total', 'total_sale', 'amount', 'total_amount'],
+    canceled:   ['cancelado', 'canceled', 'cancelled', 'is_canceled', 'isCanceled', 'is_cancelled', 'is_deleted', 'deleted_at'],
+    status:     ['status', 'estado', 'situacao', 'desc_sale_status', 'id_sale_status', 'sale_status'],
+    items:      ['itens', 'items', 'produtos', 'products', 'sale_items', 'saleItems', 'detalhes', 'sale_items_data'],
+    saleType:   ['id_sale_type', 'sale_type', 'saleType', 'tipo_venda', 'id_type', 'type'],
+    entregador: ['desc_delivery_man', 'delivery_man', 'deliveryMan', 'entregador', 'driver', 'courier']
   };
 
   const ITEM_ALIASES = {
@@ -386,9 +388,65 @@
     const inlineItems = getField(raw, saleMap, 'items', null);
     const saleId = String(id || (mesa + '-' + comanda + '-' + dateText + '-' + total));
 
+    // ── Sale type (1 = delivery, 2 = pickup, 3 = dine-in) ──
+    const saleType = Number(getField(raw, saleMap, 'saleType', 0));
+
+    // ── Entregador: lives inside raw.delivery sub-object on Saipos API ──
+    let entregador = String(getField(raw, saleMap, 'entregador', '') || '').trim();
+    if (!entregador) {
+      const delObj = raw.delivery || raw.deliveryMan || null;
+      if (delObj && typeof delObj === 'object') {
+        const d_desc = delObj.desc_delivery_man || delObj.desc_deliveryman || delObj.name ||
+                       delObj.deliveryMan || delObj.delivery_man || delObj.driver;
+        if (typeof d_desc === 'string') {
+          entregador = d_desc;
+        } else if (delObj.employee && typeof delObj.employee === 'object') {
+          entregador = delObj.employee.name || delObj.employee.desc_employee || '';
+        } else {
+          // deep search for 'name' or 'desc' near delivery
+          const searchName = (obj) => {
+            if (!obj || typeof obj !== 'object') return '';
+            if (typeof obj.name === 'string') return obj.name;
+            if (typeof obj.desc_employee === 'string') return obj.desc_employee;
+            if (typeof obj.desc_delivery_man === 'string') return obj.desc_delivery_man;
+            for (let k in obj) {
+              if (obj[k] && typeof obj[k] === 'object' && k !== 'company' && k !== 'store') {
+                const res = searchName(obj[k]);
+                if (res) return res;
+              }
+            }
+            return '';
+          };
+          entregador = searchName(delObj);
+        }
+      }
+    }
+    
+    // Fallback: o Saipos muitas vezes coloca o entregador na lista de 'waiters' da venda
+    if (!entregador || entregador === 'null') {
+      const wList = raw.waiters || raw.saleWaiters || raw.employees || [];
+      if (Array.isArray(wList) && wList.length > 0) {
+        const w0 = wList[0];
+        if (typeof w0 === 'string') entregador = w0;
+        else if (typeof w0 === 'object') entregador = w0.name || w0.desc_employee || w0.desc_delivery_man || '';
+      }
+    }
+    
+    // Último fallback: tenta pegar o "garçom" do primeiro item se for delivery
+    if ((!entregador || entregador === 'null') && saleType === 1 && inlineItems && inlineItems.length > 0) {
+      const it0 = inlineItems[0];
+      if (typeof it0 === 'object') {
+        const itemGarcom = it0.waiter || it0.employee || it0.garcom || '';
+        if (typeof itemGarcom === 'string') entregador = itemGarcom;
+        else if (typeof itemGarcom === 'object') entregador = itemGarcom.name || itemGarcom.desc_employee || '';
+      }
+    }
+
+    entregador = String(entregador).trim();
+
     return {
       idx, mesa, comanda, dateText, pagamento, saleId,
-      totalItens, taxa, total, canceled,
+      totalItens, taxa, total, canceled, saleType, entregador,
       hasItemCanceled: false, items: [],
       _rawId: id, _rawItems: inlineItems
     };
@@ -1812,7 +1870,284 @@
       })();
       return true;
     }
+
+    // ── IMPORT_DELIVERY ─────────────────────────────────────
+    if (msg.action === 'IMPORT_DELIVERY') {
+      const rows = msg.rows || [];
+      if (!rows.length) {
+        sendResponse({ error: 'Nenhuma linha recebida.' });
+        return true;
+      }
+
+      // Must be on delivery-area page
+      if (!window.location.href.includes('delivery-area')) {
+        sendResponse({ error: 'Navegue para conta.saipos.com/#/app/store/delivery-area primeiro.' });
+        return true;
+      }
+
+      sendResponse({ started: true });
+
+      (async () => {
+        const emitDel = (text) => {
+          try { chrome.runtime.sendMessage({ type: 'DELIVERY_LOG', text }); } catch(_) {}
+        };
+
+        // ── Helpers ──────────────────────────────────────────
+
+        // Normalize: remove accents, lowercase, trim, strip trailing colon/dot
+        function norm(s) {
+          return String(s || '')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase().trim()
+            .replace(/[:.]$/, '').trim();
+        }
+
+        // Parse value: accepts "R$10,00", "$10.00", "10", "10,50" etc.
+        function parseVal(raw) {
+          const s = String(raw || '').replace(/R\$|\$/g, '').trim()
+            .replace(/\./g, '').replace(',', '.');
+          return parseFloat(s);
+        }
+
+        // Wait for a DOM condition
+        function waitFor(fn, ms = 5000, interval = 150) {
+          return new Promise((resolve, reject) => {
+            const start = Date.now();
+            const check = () => {
+              const res = fn();
+              if (res) return resolve(res);
+              if (Date.now() - start > ms) return reject(new Error('timeout'));
+              setTimeout(check, interval);
+            };
+            check();
+          });
+        }
+
+        // Find the "Adicionar / +" button that opens the form row
+        function findAddBtn() {
+          // Saipos typically has an ng-click button with "addRecord" or "+" icon
+          const all = document.querySelectorAll('button');
+          for (const btn of all) {
+            const nc = btn.getAttribute('ng-click') || '';
+            if (/addRecord|add_record|novoRegistro|vm\.newRecord/i.test(nc)) return btn;
+            if (btn.title && /adicionar|add|novo/i.test(btn.title)) return btn;
+            const icon = btn.querySelector('i.zmdi-plus, i.zmdi-add');
+            if (icon) return btn;
+          }
+          // fallback: any button with text "+" or "Adicionar"
+          for (const btn of all) {
+            const t = btn.textContent.trim();
+            if (t === '+' || /adicionar/i.test(t)) return btn;
+          }
+          return null;
+        }
+
+        // Get AngularJS $scope for an element
+        function getScope(el) {
+          try {
+            return window.angular && window.angular.element(el).scope();
+          } catch(_) { return null; }
+        }
+
+        // Find the form row (vm.recordUp visible)
+        function findFormRow() {
+          return document.querySelector('[ng-if="vm.recordUp"]');
+        }
+
+        // Find select element by id, return its options as normalized name → value map
+        function buildDistrictMap() {
+          const sel = document.getElementById('district');
+          if (!sel) return null;
+          const map = {};
+          for (const opt of sel.options) {
+            if (!opt.value || opt.value === '?') continue;
+            map[norm(opt.label)] = { value: opt.value, label: opt.label };
+          }
+          return map;
+        }
+
+        // Fuzzy match: exact → starts-with → includes each word
+        function findDistrict(name, districtMap) {
+          const n = norm(name);
+          if (districtMap[n]) return districtMap[n];
+          // starts-with
+          for (const [k, v] of Object.entries(districtMap)) {
+            if (k.startsWith(n)) return v;
+          }
+          // all words of name present in key
+          const words = n.split(/\s+/).filter(w => w.length > 2);
+          for (const [k, v] of Object.entries(districtMap)) {
+            if (words.every(w => k.includes(w))) return v;
+          }
+          return null;
+        }
+
+        // Trigger AngularJS change event so Chosen + ng-model stay in sync
+        function ngSet(el, value) {
+          const nativeInput = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+            || Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value');
+          if (nativeInput && nativeInput.set) {
+            nativeInput.set.call(el, value);
+          } else {
+            el.value = value;
+          }
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        // Set select via AngularJS scope directly (most reliable for Chosen)
+        function setScopeCity(scope, idCity) {
+          scope.vm.record.selectedCity = idCity;
+          scope.$apply();
+          // Also trigger getCityDistricts
+          if (typeof scope.vm.getCityDistricts === 'function') {
+            scope.vm.getCityDistricts(idCity, null);
+            scope.$apply();
+          }
+        }
+
+        function setScopeDistrict(scope, idDistrict) {
+          scope.vm.record.id_district = idDistrict;
+          if (typeof scope.vm.setDefaultAlias === 'function') {
+            scope.vm.setDefaultAlias();
+          }
+          scope.$apply();
+        }
+
+        function setScopeAlias(scope, alias) {
+          scope.vm.record.desc_store_district = alias;
+          scope.$apply();
+        }
+
+        function setScopeFee(scope, fee) {
+          scope.vm.record.delivery_fee = fee;
+          if (typeof scope.vm.updateValueMotoboy === 'function') {
+            scope.vm.updateValueMotoboy(scope.vm.record);
+          }
+          scope.$apply();
+        }
+
+        // ── Main loop ─────────────────────────────────────────
+        const RIO_VERDE_ID = 3450;
+        let ok = 0, skip = 0, err = 0;
+        const total = rows.length;
+
+        emitDel(`🛵 Iniciando importação de <b>${total} bairros</b>...`);
+
+        for (let i = 0; i < rows.length; i++) {
+          const line = rows[i].trim();
+          // Parse "Nome do Bairro,valor"
+          const commaIdx = line.lastIndexOf(',');
+          if (commaIdx < 0) { skip++; continue; }
+          const bairroBrut = line.substring(0, commaIdx).trim();
+          const valorBrut  = line.substring(commaIdx + 1).trim();
+          const valorNum   = parseVal(valorBrut);
+
+          if (!bairroBrut || isNaN(valorNum)) {
+            emitDel(`⚠️ [${i+1}/${total}] Linha inválida: <i>${line}</i>`);
+            skip++; continue;
+          }
+
+          emitDel(`⏳ [${i+1}/${total}] Processando: <b>${bairroBrut}</b> → R$ ${valorNum.toFixed(2).replace('.',',')}...`);
+
+          try {
+            // 1) Click the Add button to open the form row
+            let formRow = findFormRow();
+            if (!formRow) {
+              const addBtn = findAddBtn();
+              if (!addBtn) throw new Error('Botão "Adicionar" não encontrado na página');
+              addBtn.click();
+              await sleep(600);
+              formRow = await waitFor(() => findFormRow(), 4000);
+              if (!formRow) throw new Error('Formulário não apareceu após clicar em Adicionar');
+            }
+
+            // 2) Get AngularJS scope
+            const scope = getScope(formRow);
+            if (!scope) throw new Error('AngularJS scope não encontrado');
+
+            // 3) Set city to Rio Verde (3450) if not already
+            const currentCity = scope.vm && scope.vm.record && scope.vm.record.selectedCity;
+            if (currentCity !== RIO_VERDE_ID) {
+              setScopeCity(scope, RIO_VERDE_ID);
+              await sleep(1200); // wait for district list to populate
+            }
+
+            // 4) Build district map and find bairro
+            const districtMap = buildDistrictMap();
+            if (!districtMap) throw new Error('Lista de bairros não carregou');
+
+            const match = findDistrict(bairroBrut, districtMap);
+            if (!match) {
+              emitDel(`⚠️ [${i+1}/${total}] Bairro não encontrado no Saipos: "<i>${bairroBrut}</i>" — pulando.`);
+              skip++;
+              // Close the form row by pressing cancel
+              const cancelBtn = formRow.querySelector('button.btn-danger, [ng-click*="recordUp = false"]');
+              if (cancelBtn) cancelBtn.click();
+              await sleep(400);
+              continue;
+            }
+
+            // 5) Set district
+            const distId = parseInt(String(match.value).replace('number:', ''));
+            setScopeDistrict(scope, distId);
+            await sleep(300);
+
+            // 6) Set alias = bairro name as typed
+            setScopeAlias(scope, bairroBrut);
+            await sleep(200);
+
+            // 7) Set delivery fee
+            setScopeFee(scope, valorNum);
+            await sleep(200);
+
+            // 8) Wait for save button to become enabled
+            const saveBtn = await waitFor(() => {
+              const btn = formRow.querySelector('button.btn-success');
+              return (btn && !btn.disabled) ? btn : null;
+            }, 4000).catch(() => null);
+
+            if (!saveBtn) {
+              // try clicking anyway (some versions don't disable the button)
+              const btn = formRow.querySelector('button.btn-success');
+              if (!btn) throw new Error('Botão de salvar não encontrado');
+              btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            } else {
+              saveBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+            }
+
+            // 9) Wait for form row to disappear (save complete)
+            await waitFor(() => !findFormRow(), 5000).catch(() => {});
+            await sleep(500);
+
+            ok++;
+            emitDel(`✅ [${i+1}/${total}] <b>${bairroBrut}</b> cadastrado! (${ok} ok / ${skip} ignorados / ${err} erros)`);
+
+          } catch (rowErr) {
+            err++;
+            emitDel(`❌ [${i+1}/${total}] Erro em "<i>${bairroBrut}</i>": ${rowErr.message}`);
+            // Close any open form
+            const formRow = findFormRow();
+            if (formRow) {
+              const cancelBtn = formRow.querySelector('button.btn-danger, [ng-click*="recordUp = false"]');
+              if (cancelBtn) cancelBtn.click();
+              await sleep(400);
+            }
+          }
+
+          await sleep(400);
+        }
+
+        const summary = `🏁 <b>Importação concluída!</b><br/>✅ Cadastrados: ${ok} | ⚠️ Ignorados: ${skip} | ❌ Erros: ${err}`;
+        emitDel(summary);
+        log(`Importação de taxas de entrega concluída: ${ok} ok, ${skip} ignorados, ${err} erros`);
+
+      })();
+      return true;
+    }
+
     return true;
   });
 
 })();
+

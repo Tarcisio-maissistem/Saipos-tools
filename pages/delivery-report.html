@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Relatório de Entregas – Saipos Tools</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'IBM Plex Sans',sans-serif;background:#f0f4f8;color:#1a1d27;font-size:13px;line-height:1.5}
+.page{max-width:1100px;margin:0 auto;padding:28px 16px 80px}
+
+/* Header */
+.header{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.logo{width:44px;height:44px;background:#0e7490;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:22px;flex-shrink:0}
+.header h1{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:700;color:#0f1117}
+.header .store{font-size:14px;color:#0e7490;font-weight:600;margin-top:2px}
+.header p{color:#6b7280;font-size:11px}
+
+/* Cards */
+.cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px}
+.card{background:#fff;border-radius:10px;padding:14px 18px;flex:1;min-width:130px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.card .cl{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.card .cv{font-size:18px;font-weight:700;margin-top:3px;font-family:'IBM Plex Mono',monospace;color:#0e7490}
+.card.warn .cv{color:#b45309}
+
+/* Toolbar */
+.toolbar{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:none;border-radius:7px;
+     font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:.15s}
+.btn-teal{background:#0e7490;color:#fff}.btn-teal:hover{background:#0c6478}
+.btn-dark{background:#0f1117;color:#fff}.btn-dark:hover{background:#374151}
+.btn-outline{background:#fff;color:#374151;border:1px solid #d1d5db}.btn-outline:hover{background:#f9fafb}
+.btn:active{transform:scale(.97)}
+
+/* Day block */
+.date-block{margin-bottom:24px}
+.date-header{background:#0e7490;color:#fff;padding:10px 16px;border-radius:10px 10px 0 0;
+             display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.dh-title{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700}
+.dh-info{display:flex;gap:16px;font-size:11px;opacity:.85;flex-wrap:wrap}
+.date-content{background:#fff;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;overflow:hidden}
+
+/* Table */
+.del-table{width:100%;border-collapse:collapse}
+.del-table thead th{background:#f0f9ff;padding:8px 12px;text-align:left;font-size:10px;
+   text-transform:uppercase;letter-spacing:.4px;color:#0e7490;font-weight:700;border-bottom:2px solid #bae6fd}
+.del-table tbody td{padding:9px 12px;border-bottom:1px solid #f0f4f8;font-size:12px;vertical-align:middle}
+.del-table tbody tr:last-child td{border-bottom:none}
+.del-table tbody tr:hover td{background:#f0f9ff}
+.tr{text-align:right}.tc{text-align:center}
+
+/* Entregador chip */
+.ent-chip{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;
+          background:#e0f2fe;color:#0369a1;letter-spacing:.2px}
+.ent-chip.none{background:#f3f4f6;color:#9ca3af}
+
+/* Entregador select inline */
+.ent-select{font-family:'IBM Plex Sans',sans-serif;font-size:11px;padding:4px 6px;
+            border:1px solid #d1d5db;border-radius:6px;background:#fff;color:#0f1117;
+            cursor:pointer;min-width:140px;max-width:220px}
+.ent-select:focus{outline:none;border-color:#0e7490;box-shadow:0 0 0 2px rgba(14,116,144,.15)}
+
+/* Pedido number */
+.pedido-num{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6b7280}
+
+/* Payment badge */
+.pay-badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;
+           background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}
+
+/* Summary table */
+.sum-title{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;margin:32px 0 12px;color:#0f1117}
+.sum-table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;
+           overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.sum-table thead th{background:#0e7490;color:#fff;padding:10px 14px;font-size:11px;
+   text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+.sum-table tbody td{padding:10px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}
+.sum-table tbody tr:last-child td{border-bottom:none}
+.sum-table tbody tr:hover td{background:#f0f9ff}
+.sum-table .total-row td{font-weight:700;background:#f0fdf4;font-family:'IBM Plex Mono',monospace}
+
+/* Fallback warning */
+.fallback-warn{background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;
+               margin-bottom:20px;font-size:12px;color:#92400e}
+
+/* Print */
+@media print{
+  .toolbar,.btn{display:none!important}
+  body{background:#fff}
+  .page{padding:0}
+  .date-block{page-break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="logo">🛵</div>
+    <div>
+      <h1>Relatório de Entregas</h1>
+      <div class="store" id="hStoreName">Carregando...</div>
+      <p id="hGenTime"></p>
+    </div>
+  </div>
+
+  <div id="fallbackWarn" class="fallback-warn" style="display:none">
+    ⚠️ <b>Atenção:</b> Não foi possível filtrar somente pedidos de entrega (o campo <code>id_sale_type</code> não foi capturado nesta sessão). Mostrando <b>todas as vendas concluídas</b>. Para filtrar corretamente, aplique novamente o filtro de datas no Saipos e clique em INICIAR.
+  </div>
+
+  <div class="cards" id="cardsArea"></div>
+
+  <div class="toolbar">
+    <button class="btn btn-dark" id="btnPrint">🖨️ Imprimir / PDF</button>
+    <button class="btn btn-outline" id="btnCSV">📊 Exportar CSV</button>
+  </div>
+
+  <div id="reportArea"></div>
+
+  <div class="sum-title">🛵 Resumo por Entregador</div>
+  <table class="sum-table" id="sumTable">
+    <thead>
+      <tr>
+        <th>Entregador</th>
+        <th class="tc">Entregas</th>
+        <th class="tr">Total (R$)</th>
+        <th class="tr">Ticket Médio</th>
+      </tr>
+    </thead>
+    <tbody id="sumBody"></tbody>
+  </table>
+
+</div>
+
+<script src="../src/lib/delivery-report.js"></script>
+</body>
+</html>
