@@ -1871,6 +1871,56 @@
       return true;
     }
 
+    // ── FETCH_DELIVERY_MAN: busca nome do entregador via endpoint individual ──
+    if (msg.action === 'FETCH_DELIVERY_MAN') {
+      (async () => {
+        try {
+          let storeId = getStoreIdFromUrl();
+          if (!storeId) { await getCapturedCalls(); storeId = getStoreIdFromUrl(); }
+          if (!storeId) return sendResponse({ error: 'StoreId não encontrado.', results: [] });
+
+          const saleIds = msg.saleIds || [];
+          if (!saleIds.length) return sendResponse({ results: [] });
+
+          // Busca em paralelo em lotes de 8 para não sobrecarregar a API
+          const results = [];
+          const BATCH = 8;
+          for (let i = 0; i < saleIds.length; i += BATCH) {
+            const batch = saleIds.slice(i, i + BATCH);
+            const batchRes = await Promise.all(batch.map(async (saleId) => {
+              try {
+                const url = `https://api.saipos.com/v1/stores/${storeId}/sales/${saleId}`;
+                const data = await mainWorldFetch(url);
+                if (!data || data.error) return { saleId: String(saleId), entregador: '' };
+
+                const sale = data.data || data;
+                const del = sale.delivery || {};
+                let ent = '';
+
+                // employee é a fonte mais comum no Saipos
+                if (del.employee && typeof del.employee === 'object') {
+                  ent = del.employee.desc_employee || del.employee.name || '';
+                }
+                if (!ent) ent = del.desc_delivery_man || del.name || del.deliveryman || '';
+                if (!ent && del.delivery_man && typeof del.delivery_man === 'object') {
+                  ent = del.delivery_man.name || del.delivery_man.desc_employee || '';
+                }
+
+                return { saleId: String(saleId), entregador: String(ent).trim() };
+              } catch(e) {
+                return { saleId: String(saleId), entregador: '' };
+              }
+            }));
+            results.push(...batchRes);
+          }
+          sendResponse({ results });
+        } catch(err) {
+          sendResponse({ error: err.message, results: [] });
+        }
+      })();
+      return true;
+    }
+
     // ── IMPORT_DELIVERY ─────────────────────────────────────
     if (msg.action === 'IMPORT_DELIVERY') {
       const rows = msg.rows || [];

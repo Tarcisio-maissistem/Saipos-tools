@@ -82,9 +82,30 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f4f8;color:#1a1d27;fon
 .fallback-warn{background:#fef9c3;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;
                margin-bottom:20px;font-size:12px;color:#92400e}
 
+/* Tabs */
+.rpt-tabs{display:flex;gap:4px;margin-bottom:20px;border-bottom:2px solid #e5e7eb}
+.rpt-tab{padding:9px 18px;font-size:12px;font-weight:600;cursor:pointer;border:none;
+         background:none;color:#6b7280;border-bottom:2px solid transparent;margin-bottom:-2px;
+         border-radius:6px 6px 0 0;transition:.15s;font-family:'IBM Plex Sans',sans-serif}
+.rpt-tab:hover{background:#f0f9ff;color:#0e7490}
+.rpt-tab.active{color:#0e7490;border-bottom-color:#0e7490;background:#f0f9ff}
+.rpt-tab .badge{display:inline-block;background:#0e7490;color:#fff;border-radius:10px;
+                padding:1px 6px;font-size:10px;margin-left:5px;vertical-align:middle}
+
+/* Filter panel */
+.filter-panel{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:20px;margin-bottom:24px}
+.filter-row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+.filter-group{display:flex;flex-direction:column;gap:4px;min-width:140px}
+.filter-group label{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.4px}
+.filter-group input,.filter-group select{padding:7px 10px;border:1px solid #d1d5db;border-radius:7px;
+  font-size:12px;font-family:'IBM Plex Sans',sans-serif;background:#f9fafb;color:#0f1117}
+.filter-group input:focus,.filter-group select:focus{outline:none;border-color:#0e7490;background:#fff}
+.filter-active-badge{background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;
+  border-radius:6px;padding:6px 12px;font-size:11px;font-weight:600;margin-bottom:14px;display:none}
+
 /* Print */
 @media print{
-  .toolbar,.btn{display:none!important}
+  .toolbar,.btn,.rpt-tabs,.filter-panel{display:none!important}
   body{background:#fff}
   .page{padding:0}
   .date-block{page-break-inside:avoid}
@@ -103,31 +124,76 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f4f8;color:#1a1d27;fon
     </div>
   </div>
 
-  <div id="fallbackWarn" class="fallback-warn" style="display:none">
-    ⚠️ <b>Atenção:</b> Não foi possível filtrar somente pedidos de entrega (o campo <code>id_sale_type</code> não foi capturado nesta sessão). Mostrando <b>todas as vendas concluídas</b>. Para filtrar corretamente, aplique novamente o filtro de datas no Saipos e clique em INICIAR.
+  <!-- Abas de navegação -->
+  <div class="rpt-tabs">
+    <button class="rpt-tab active" id="tabRelatorio">📊 Relatório <span class="badge" id="countBadge" style="display:none"></span></button>
+    <button class="rpt-tab" id="tabFiltros">🔍 Filtrar <span class="badge" id="filterBadge" style="display:none"></span></button>
   </div>
 
-  <div class="cards" id="cardsArea"></div>
-
-  <div class="toolbar">
-    <button class="btn btn-dark" id="btnPrint">🖨️ Imprimir / PDF</button>
-    <button class="btn btn-outline" id="btnCSV">📊 Exportar CSV</button>
+  <!-- Painel: Filtros -->
+  <div id="panelFiltros" style="display:none">
+    <div class="filter-panel">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label>Data inicial</label>
+          <input type="date" id="fDateFrom">
+        </div>
+        <div class="filter-group">
+          <label>Data final</label>
+          <input type="date" id="fDateTo">
+        </div>
+        <div class="filter-group">
+          <label>Hora inicial</label>
+          <input type="time" id="fTimeFrom">
+        </div>
+        <div class="filter-group">
+          <label>Hora final</label>
+          <input type="time" id="fTimeTo">
+        </div>
+        <div class="filter-group">
+          <label>Entregador</label>
+          <select id="fEntregador">
+            <option value="">Todos</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-teal" id="btnApplyFilter">✔ Aplicar Filtro</button>
+        <button class="btn btn-outline" id="btnClearFilter">✕ Limpar</button>
+      </div>
+    </div>
   </div>
 
-  <div id="reportArea"></div>
+  <!-- Painel: Relatório -->
+  <div id="panelRelatorio">
+    <div id="fallbackWarn" class="fallback-warn" style="display:none">
+      ⚠️ <b>Atenção:</b> Não foi possível filtrar somente pedidos de entrega (o campo <code>id_sale_type</code> não foi capturado nesta sessão). Mostrando <b>todas as vendas concluídas</b>. Para filtrar corretamente, aplique novamente o filtro de datas no Saipos e clique em INICIAR.
+    </div>
 
-  <div class="sum-title">🛵 Resumo por Entregador</div>
-  <table class="sum-table" id="sumTable">
-    <thead>
-      <tr>
-        <th>Entregador</th>
-        <th class="tc">Entregas</th>
-        <th class="tr">Total (R$)</th>
-        <th class="tr">Ticket Médio</th>
-      </tr>
-    </thead>
-    <tbody id="sumBody"></tbody>
-  </table>
+    <div id="filterActiveBadge" class="filter-active-badge"></div>
+
+    <div class="cards" id="cardsArea"></div>
+
+    <div class="toolbar">
+      <button class="btn btn-dark" id="btnPrint">🖨️ Imprimir / PDF</button>
+      <button class="btn btn-outline" id="btnCSV">📊 Exportar CSV</button>
+    </div>
+
+    <div id="reportArea"></div>
+
+    <div class="sum-title">🛵 Resumo por Entregador</div>
+    <table class="sum-table" id="sumTable">
+      <thead>
+        <tr>
+          <th>Entregador</th>
+          <th class="tc">Entregas</th>
+          <th class="tr">Total (R$)</th>
+          <th class="tr">Ticket Médio</th>
+        </tr>
+      </thead>
+      <tbody id="sumBody"></tbody>
+    </table>
+  </div>
 
 </div>
 

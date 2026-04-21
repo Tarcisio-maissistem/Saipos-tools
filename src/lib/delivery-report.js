@@ -12,6 +12,31 @@ let APP_STATE = {
   uniqueEnt: []
 };
 
+// Estado dos filtros aplicados
+let filterState = { dateFrom: '', dateTo: '', timeFrom: '', timeTo: '', entregador: '' };
+
+// Retorna vendas filtradas pelo filterState
+function getDisplaySales() {
+  return APP_STATE.sales.filter(s => {
+    const dia  = (s.dateText || '').substring(0, 10); // "2026-04-19"
+    const hora = s.dateText && s.dateText.length > 10 ? s.dateText.substring(11, 16) : ''; // "14:30"
+    if (filterState.dateFrom  && dia  < filterState.dateFrom)  return false;
+    if (filterState.dateTo    && dia  > filterState.dateTo)    return false;
+    if (filterState.timeFrom  && hora && hora < filterState.timeFrom) return false;
+    if (filterState.timeTo    && hora && hora > filterState.timeTo)   return false;
+    if (filterState.entregador) {
+      const ent = (s.entregador || '').trim().toUpperCase();
+      if (ent !== filterState.entregador.toUpperCase()) return false;
+    }
+    return true;
+  });
+}
+
+// Conta filtros ativos
+function countActiveFilters() {
+  return Object.values(filterState).filter(v => v !== '').length;
+}
+
 function fmt(n) {
   return (n || 0).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
@@ -77,8 +102,28 @@ window.updateEntregador = function(idx, newValue) {
 };
 
 function render() {
-  const { sales, storeName, dateRange, fallback } = APP_STATE;
+  const sales    = getDisplaySales(); // respeita filtro ativo
+  const { storeName, dateRange, fallback } = APP_STATE;
   const ts = new Date().toLocaleString('pt-BR');
+
+  // Badge de contagem e indicador de filtro ativo
+  const total = APP_STATE.sales.length;
+  const active = countActiveFilters();
+  const countBadge = document.getElementById('countBadge');
+  if (countBadge) { countBadge.textContent = sales.length + '/' + total; countBadge.style.display = active > 0 ? '' : 'none'; }
+  const filterBadge = document.getElementById('filterBadge');
+  if (filterBadge) { filterBadge.textContent = active; filterBadge.style.display = active > 0 ? '' : 'none'; }
+  const activeBadge = document.getElementById('filterActiveBadge');
+  if (activeBadge) {
+    if (active > 0) {
+      activeBadge.style.display = '';
+      activeBadge.innerHTML = `🔍 Filtro ativo: mostrando ${sales.length} de ${total} entregas — <a href="#" id="lnkClearFilter" style="color:#0369a1">limpar filtro</a>`;
+      const lnk = document.getElementById('lnkClearFilter');
+      if (lnk) lnk.addEventListener('click', e => { e.preventDefault(); clearFilter(); });
+    } else {
+      activeBadge.style.display = 'none';
+    }
+  }
 
   // Header info
   document.getElementById('hStoreName').textContent = '🏪 ' + (storeName || 'Loja Saipos');
@@ -228,15 +273,61 @@ chrome.storage.local.get('saiposDeliveryData', data => {
   APP_STATE.fallback = payload.fallback;
   
   gatherUniqueEntregadores();
+
+  // Popula select de entregadores no painel de filtros
+  const fEnt = document.getElementById('fEntregador');
+  if (fEnt) {
+    fEnt.innerHTML = '<option value="">Todos</option>';
+    APP_STATE.uniqueEnt.forEach(e => {
+      const opt = document.createElement('option');
+      opt.value = e; opt.textContent = e;
+      fEnt.appendChild(opt);
+    });
+  }
+
   render();
 });
 
-// Bind botoes
+// ── Lógica de abas ──────────────────────────────────────────────
+function switchTab(name) {
+  document.getElementById('tabRelatorio').classList.toggle('active', name === 'relatorio');
+  document.getElementById('tabFiltros').classList.toggle('active', name === 'filtros');
+  document.getElementById('panelRelatorio').style.display = name === 'relatorio' ? '' : 'none';
+  document.getElementById('panelFiltros').style.display   = name === 'filtros'   ? '' : 'none';
+}
+document.getElementById('tabRelatorio').addEventListener('click', () => switchTab('relatorio'));
+document.getElementById('tabFiltros').addEventListener('click',   () => switchTab('filtros'));
+
+// ── Lógica de filtros ────────────────────────────────────────────
+function applyFilter() {
+  filterState.dateFrom   = document.getElementById('fDateFrom').value;
+  filterState.dateTo     = document.getElementById('fDateTo').value;
+  filterState.timeFrom   = document.getElementById('fTimeFrom').value;
+  filterState.timeTo     = document.getElementById('fTimeTo').value;
+  filterState.entregador = document.getElementById('fEntregador').value;
+  render();
+  switchTab('relatorio'); // volta para o relatório após aplicar
+}
+
+function clearFilter() {
+  filterState = { dateFrom: '', dateTo: '', timeFrom: '', timeTo: '', entregador: '' };
+  document.getElementById('fDateFrom').value   = '';
+  document.getElementById('fDateTo').value     = '';
+  document.getElementById('fTimeFrom').value   = '';
+  document.getElementById('fTimeTo').value     = '';
+  document.getElementById('fEntregador').value = '';
+  render();
+}
+
+document.getElementById('btnApplyFilter').addEventListener('click', applyFilter);
+document.getElementById('btnClearFilter').addEventListener('click', clearFilter);
+
+// ── Bind botoes ──────────────────────────────────────────────────
 document.getElementById('btnPrint').addEventListener('click', () => window.print());
 document.getElementById('btnCSV').addEventListener('click', () => {
   const ts2 = new Date().toISOString().slice(0, 10);
   let csv = 'Data;Hora;Pedido;Entregador;Pagamento;Total;Itens\n';
-  for (const s of APP_STATE.sales) {
+  for (const s of getDisplaySales()) { // exporta apenas o que está filtrado
     const hora = s.dateText && s.dateText.length > 10 ? s.dateText.substring(11, 16) : '';
     const dia  = (s.dateText || '').substring(0, 10);
     const ent  = (s.entregador || '').trim().toUpperCase() || 'Não informado';

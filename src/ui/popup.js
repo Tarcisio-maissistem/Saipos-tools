@@ -181,19 +181,33 @@ $('bDeliveryReport').addEventListener('click', async () => {
   } catch (_) {}
 
   // Filter: only delivery type (saleType === 1) and NOT canceled
-  const deliverySales = allSales.filter(s => !s.canceled && s.saleType === 1);
+  let deliverySales = allSales.filter(s => !s.canceled && s.saleType === 1);
+  const isFallback = deliverySales.length === 0;
+  if (isFallback) deliverySales = allSales.filter(s => !s.canceled);
 
-  if (deliverySales.length === 0) {
-    // Fallback: saleType não capturado — exibe todas as vendas com aviso
-    const concluded = allSales.filter(s => !s.canceled);
-    await chrome.storage.local.set({
-      saiposDeliveryData: { sales: concluded, storeName, dateRange: allDateRange, fallback: true }
-    });
-  } else {
-    await chrome.storage.local.set({
-      saiposDeliveryData: { sales: deliverySales, storeName, dateRange: allDateRange, fallback: false }
-    });
+  // Enriquece entregadores ausentes via fetch individual (API por saleId)
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const missingEnt = deliverySales.filter(s => !s.entregador || !s.entregador.trim());
+  if (missingEnt.length > 0 && activeTab) {
+    try {
+      const saleIds = missingEnt.map(s => String(s.saleId || s._rawId || s.idx)).filter(Boolean);
+      const detRes = await chrome.tabs.sendMessage(activeTab.id, {
+        action: 'FETCH_DELIVERY_MAN', saleIds
+      }).catch(() => null);
+      if (detRes && detRes.results) {
+        const nameMap = {};
+        detRes.results.forEach(r => { if (r.entregador) nameMap[r.saleId] = r.entregador; });
+        deliverySales.forEach(s => {
+          const id = String(s.saleId || s._rawId || s.idx);
+          if (nameMap[id] && (!s.entregador || !s.entregador.trim())) s.entregador = nameMap[id];
+        });
+      }
+    } catch(e) {}
   }
+
+  await chrome.storage.local.set({
+    saiposDeliveryData: { sales: deliverySales, storeName, dateRange: allDateRange, fallback: isFallback }
+  });
 
   chrome.tabs.create({ url: chrome.runtime.getURL('pages/delivery-report.html') });
 });
