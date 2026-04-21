@@ -13,13 +13,30 @@ let APP_STATE = {
 };
 
 // Estado dos filtros aplicados
-let filterState = { dateFrom: '', dateTo: '', timeFrom: '', timeTo: '', entregador: '' };
+let filterState = { dateFrom: '', dateTo: '', timeFrom: '', timeTo: '', entregador: '', bloquearParceiros: false };
+
+// Detecta se um canal é de parceiro externo (iFood, 99food, etc.)
+function isParceiro(canal) {
+  const c = (canal || '').toLowerCase();
+  return c.includes('ifood') || c.includes('99food') || c.includes('99 food') || c.includes('rappi');
+}
+
+// Badge colorido para o canal
+function canalBadge(canal) {
+  const c = canal || '—';
+  const lower = c.toLowerCase();
+  let style = 'background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0'; // próprio (verde)
+  if (lower.includes('ifood'))               style = 'background:#fff1f0;color:#cf1322;border:1px solid #ffa39e'; // iFood (vermelho)
+  else if (lower.includes('99'))             style = 'background:#fffbe6;color:#d48806;border:1px solid #ffe58f'; // 99food (amarelo)
+  else if (lower.includes('rappi'))          style = 'background:#fff0f6;color:#c41d7f;border:1px solid #ffadd2'; // Rappi (rosa)
+  return `<span class="pay-badge" style="${style}">${c}</span>`;
+}
 
 // Retorna vendas filtradas pelo filterState
 function getDisplaySales() {
   return APP_STATE.sales.filter(s => {
-    const dia  = (s.dateText || '').substring(0, 10); // "2026-04-19"
-    const hora = s.dateText && s.dateText.length > 10 ? s.dateText.substring(11, 16) : ''; // "14:30"
+    const dia  = (s.dateText || '').substring(0, 10);
+    const hora = s.dateText && s.dateText.length > 10 ? s.dateText.substring(11, 16) : '';
     if (filterState.dateFrom  && dia  < filterState.dateFrom)  return false;
     if (filterState.dateTo    && dia  > filterState.dateTo)    return false;
     if (filterState.timeFrom  && hora && hora < filterState.timeFrom) return false;
@@ -28,13 +45,16 @@ function getDisplaySales() {
       const ent = (s.entregador || '').trim().toUpperCase();
       if (ent !== filterState.entregador.toUpperCase()) return false;
     }
+    // Bloqueia pedidos de parceiros externos (iFood, 99food, Rappi...)
+    if (filterState.bloquearParceiros && isParceiro(s.pagamento)) return false;
     return true;
   });
 }
 
-// Conta filtros ativos
+// Conta filtros ativos (strings não-vazias + booleanos ativos)
 function countActiveFilters() {
-  return Object.values(filterState).filter(v => v !== '').length;
+  const strCount = Object.entries(filterState).filter(([k, v]) => k !== 'bloquearParceiros' && v !== '').length;
+  return strCount + (filterState.bloquearParceiros ? 1 : 0);
 }
 
 function fmt(n) {
@@ -184,7 +204,7 @@ function render() {
         <th>#Pedido</th>
         <th>Hora</th>
         <th>Entregador</th>
-        <th>Pagamento</th>
+        <th>Canal</th>
         <th class="tc">Itens registrados</th>
         <th class="tr">Total (R$)</th>
       </tr></thead>
@@ -218,13 +238,11 @@ function render() {
       const itensTxt = s.items && s.items.length > 0
         ? s.items.filter(i => !i.itemCancelado).map(i => `${i.qtd}× ${i.nome}`).join(', ')
         : '—';
-      const pay = s.pagamento || '—';
-
       H += `<tr>
         <td><span class="pedido-num">#${s.saleId || s._rawId || '—'}</span></td>
         <td>${hora}</td>
         <td>${selectHtml}</td>
-        <td><span class="pay-badge">${pay}</span></td>
+        <td>${canalBadge(s.pagamento)}</td>
         <td class="tc" style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escCSV(itensTxt)}">${itensTxt.length > 60 ? itensTxt.substring(0, 57) + '...' : itensTxt}</td>
         <td class="tr" style="font-family:'IBM Plex Mono',monospace;font-weight:600">R$ ${fmt(s.total)}</td>
       </tr>`;
@@ -304,18 +322,20 @@ function applyFilter() {
   filterState.dateTo     = document.getElementById('fDateTo').value;
   filterState.timeFrom   = document.getElementById('fTimeFrom').value;
   filterState.timeTo     = document.getElementById('fTimeTo').value;
-  filterState.entregador = document.getElementById('fEntregador').value;
+  filterState.entregador       = document.getElementById('fEntregador').value;
+  filterState.bloquearParceiros = document.getElementById('fBloquearParceiros').checked;
   render();
   switchTab('relatorio'); // volta para o relatório após aplicar
 }
 
 function clearFilter() {
-  filterState = { dateFrom: '', dateTo: '', timeFrom: '', timeTo: '', entregador: '' };
-  document.getElementById('fDateFrom').value   = '';
-  document.getElementById('fDateTo').value     = '';
-  document.getElementById('fTimeFrom').value   = '';
-  document.getElementById('fTimeTo').value     = '';
-  document.getElementById('fEntregador').value = '';
+  filterState = { dateFrom: '', dateTo: '', timeFrom: '', timeTo: '', entregador: '', bloquearParceiros: false };
+  document.getElementById('fDateFrom').value        = '';
+  document.getElementById('fDateTo').value          = '';
+  document.getElementById('fTimeFrom').value        = '';
+  document.getElementById('fTimeTo').value          = '';
+  document.getElementById('fEntregador').value      = '';
+  document.getElementById('fBloquearParceiros').checked = false;
   render();
 }
 
@@ -326,7 +346,7 @@ document.getElementById('btnClearFilter').addEventListener('click', clearFilter)
 document.getElementById('btnPrint').addEventListener('click', () => window.print());
 document.getElementById('btnCSV').addEventListener('click', () => {
   const ts2 = new Date().toISOString().slice(0, 10);
-  let csv = 'Data;Hora;Pedido;Entregador;Pagamento;Total;Itens\n';
+  let csv = 'Data;Hora;Pedido;Entregador;Canal;Total;Itens\n';
   for (const s of getDisplaySales()) { // exporta apenas o que está filtrado
     const hora = s.dateText && s.dateText.length > 10 ? s.dateText.substring(11, 16) : '';
     const dia  = (s.dateText || '').substring(0, 10);
