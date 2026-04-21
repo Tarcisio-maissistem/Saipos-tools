@@ -396,8 +396,8 @@
     // DEBUG — loga estrutura do delivery apenas para vendas tipo 1 (delivery)
     if (!entregador && saleType === 1) {
       console.log('[SPT-DELIVERY] mapSale saleId=' + (raw.id_sale || raw.id) +
-        ' — raw.delivery:', JSON.stringify(raw.delivery).substring(0, 400),
-        '| raw keys:', Object.keys(raw).filter(k => /deliver|entregador|waiter|employee/i.test(k)));
+        ' — raw.delivery:', (JSON.stringify(raw.delivery) || '{}').substring(0, 400),
+        '| raw keys com delivery/entregador:', Object.keys(raw).filter(k => /deliver|entregador|waiter|employee/i.test(k)));
     }
     if (!entregador) {
       const delObj = raw.delivery || raw.deliveryMan || null;
@@ -1919,7 +1919,7 @@
 
                 // Log completo do objeto delivery para cada venda
                 console.log('[SPT-DELIVERY] saleId', saleId, '— delivery keys:', Object.keys(del),
-                  '| delivery JSON:', JSON.stringify(del).substring(0, 400));
+                  '| delivery JSON:', (JSON.stringify(del) || '{}').substring(0, 400));
 
                 let ent = '';
 
