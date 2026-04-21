@@ -1460,6 +1460,31 @@
       if (!EXT.running) { runExtraction(); sendResponse({ ok: true }); }
       else sendResponse({ ok: false, msg: 'Já rodando' });
     }
+    // Preenche formulário via interceptor e auto-inicia a extração
+    if (msg.action === 'FILL_AND_SEARCH') {
+      sendResponse({ ok: true }); // responde imediatamente
+      (async () => {
+        // Dispara para o interceptor (MAIN world) preencher o Angular form e clicar Pesquisar
+        window.dispatchEvent(new CustomEvent('__saipos_fill_form', {
+          detail: { dateFrom: msg.dateFrom || '', dateTo: msg.dateTo || '', saleType: msg.saleType || 'all' }
+        }));
+        // Aguarda API ser capturada (até 10s) — o interceptor escreve dataset após cada call
+        const prevIdx = parseInt(document.documentElement.dataset.saiposLastSalesIdx || '-1');
+        let apiReady = false;
+        for (let i = 0; i < 20; i++) {
+          await sleep(500);
+          const newIdx = parseInt(document.documentElement.dataset.saiposLastSalesIdx || '-1');
+          if (newIdx > prevIdx) { apiReady = true; break; }
+        }
+        if (apiReady) {
+          await sleep(400); // pequena pausa para estabilizar
+          if (!EXT.running) runExtraction();
+        } else {
+          log('FILL_AND_SEARCH: timeout aguardando resposta da API — inicie manualmente', 'warn');
+        }
+      })();
+      return true;
+    }
     if (msg.action === 'PAUSE') {
       EXT.paused = !EXT.paused;
       sendResponse({ paused: EXT.paused });

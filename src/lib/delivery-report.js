@@ -87,39 +87,7 @@ function gatherUniqueEntregadores() {
   APP_STATE.uniqueEnt = Array.from(set).sort();
 }
 
-// Handler para mudança no select inline
-window.updateEntregador = function(idx, newValue) {
-  if (newValue === '__NEW__') {
-    newValue = prompt('Digite o nome do entregador:');
-    if (!newValue) {
-      render(); // reverte para o estado anterior
-      return;
-    }
-  }
-  
-  newValue = (newValue || '').trim().toUpperCase();
-  
-  // Compara como string para evitar falha de tipo (idx pode ser number no JSON)
-  const sameId = s => String(s.idx) === String(idx) || String(s._rawId) === String(idx) || String(s.saleId) === String(idx);
-
-  const sale = APP_STATE.sales.find(sameId);
-  if (sale) {
-    sale.entregador = newValue;
-
-    // Salva no storage (persistência)
-    chrome.storage.local.get('saiposDeliveryData', data => {
-      const payload = data && data.saiposDeliveryData;
-      if (payload && payload.sales) {
-        const memSale = payload.sales.find(sameId);
-        if (memSale) memSale.entregador = newValue;
-        chrome.storage.local.set({ saiposDeliveryData: payload });
-      }
-    });
-
-    gatherUniqueEntregadores();
-    render();
-  }
-};
+// updateEntregador removido — entregador é exibido como chip somente-leitura
 
 function render() {
   const sales    = getDisplaySales(); // respeita filtro ativo
@@ -213,27 +181,11 @@ function render() {
     for (const s of dsales) {
       const hora = s.dateText && s.dateText.length > 10 ? s.dateText.substring(11, 16) : '—';
       const ent  = (s.entregador || '').trim().toUpperCase();
-      
-      const iden = s.idx || s._rawId || s.saleId;
-      
-      // Inline select for Entregador
-      let opts = `<option value="">-- Selecione / Não Informado --</option>`;
-      let hasSel = false;
-      for (const ue of APP_STATE.uniqueEnt) {
-        const isSel = (ue === ent);
-        if (isSel) hasSel = true;
-        opts += `<option value="${ue}" ${isSel ? 'selected' : ''}>${ue}</option>`;
-      }
-      if (ent && ent !== 'NÃO INFORMADO' && !hasSel) {
-        opts += `<option value="${ent}" selected>${ent}</option>`;
-      }
-      opts += `<option value="__NEW__">+ NOVO ENTREGADOR...</option>`;
-      
-      const selectHtml = `<select class="ent-select" onchange="updateEntregador('${iden}', this.value)" style="${
-        (!ent || ent === 'NÃO INFORMADO') 
-          ? 'border:1px solid #ff4b4b; background:#fee2e2; color:#b91c1c;' 
-          : ''
-      }">${opts}</select>`;
+
+      // Chip estático — sem edição inline
+      const entChip = ent && ent !== 'NÃO INFORMADO'
+        ? `<span class="ent-chip">${ent}</span>`
+        : `<span class="ent-chip none">Não informado</span>`;
 
       const itensTxt = s.items && s.items.length > 0
         ? s.items.filter(i => !i.itemCancelado).map(i => `${i.qtd}× ${i.nome}`).join(', ')
@@ -241,7 +193,7 @@ function render() {
       H += `<tr>
         <td><span class="pedido-num">#${s.saleId || s._rawId || '—'}</span></td>
         <td>${hora}</td>
-        <td>${selectHtml}</td>
+        <td>${entChip}</td>
         <td>${canalBadge(s.pagamento)}</td>
         <td class="tc" style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escCSV(itensTxt)}">${itensTxt.length > 60 ? itensTxt.substring(0, 57) + '...' : itensTxt}</td>
         <td class="tr" style="font-family:'IBM Plex Mono',monospace;font-weight:600">R$ ${fmt(s.total)}</td>

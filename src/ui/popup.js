@@ -114,23 +114,66 @@ $('bTest').addEventListener('click', async () => {
 });
 // ── INICIAR ──────────────────────────────────────────────────
 $('bStart').addEventListener('click', async () => {
-  const ok = await checkUrl();
-  if (!ok) return;
+  const dateFrom = $('pDateFrom').value;  // 'YYYY-MM-DD'
+  const dateTo   = $('pDateTo').value;
+  const timeFrom = $('pTimeFrom').value;
+  const timeTo   = $('pTimeTo').value;
+  const saleType = $('pSaleType').value;  // 'all' | 'delivery' | 'table'
 
   allSales = [];
   $('log-content').innerHTML = '';
   $('resumo-content').innerHTML = '<div class="empty"><big>👤</big>Processando...</div>';
-
   isRunning = true;
   isPaused  = false;
-  setStatus('run', 'Iniciando robô...');
+  setStatus('run', 'Iniciando...');
   setProgress(0, 0);
   setButtons(true);
-
-  // Reseta estado no background
   chrome.runtime.sendMessage({ type: 'RESET' }).catch(() => {});
 
-  await sendContent('START');
+  // Salva parâmetros para uso nos relatórios (tempo e tipo)
+  await chrome.storage.local.set({ saiposSearchParams: { dateFrom, dateTo, timeFrom, timeTo, saleType } });
+
+  const TARGET = 'https://conta.saipos.com/#/app/report/sales-by-period';
+  let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  const onSaipos       = tab && tab.url && tab.url.includes('conta.saipos.com');
+  const onCorrectPage  = onSaipos && tab.url.includes('sales-by-period');
+
+  // Navega para a página correta se necessário
+  if (!tab) {
+    tab = await chrome.tabs.create({ url: TARGET });
+  } else if (!onSaipos) {
+    setStatus('warn', 'Abrindo Saipos...');
+    await chrome.tabs.update(tab.id, { url: TARGET });
+  } else if (!onCorrectPage) {
+    setStatus('run', 'Navegando para relatório...');
+    await chrome.tabs.update(tab.id, { url: TARGET });
+  }
+
+  // Se datas foram fornecidas, envia FILL_AND_SEARCH com retry
+  if (dateFrom || dateTo) {
+    setStatus('run', 'Aguardando página...');
+    let filled = false;
+    for (let i = 0; i < 20; i++) { // até 10s
+      await new Promise(r => setTimeout(r, 500));
+      const res = await chrome.tabs.sendMessage(tab.id, {
+        action: 'FILL_AND_SEARCH', dateFrom, dateTo, saleType
+      }).catch(() => null);
+      if (res && res.ok) { filled = true; break; }
+    }
+    if (!filled) {
+      setStatus('warn', 'Página não respondeu — preencha as datas manualmente');
+      isRunning = false;
+      setButtons(false);
+    } else {
+      setStatus('run', 'Formulário preenchido, aguardando busca...');
+    }
+  } else {
+    // Sem datas: fluxo manual (usuário já aplicou filtro no Saipos)
+    const ok = await checkUrl();
+    if (!ok) { isRunning = false; setButtons(false); return; }
+    await sendContent('START');
+  }
 });
 
 // ── PAUSAR ───────────────────────────────────────────────────
@@ -716,6 +759,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const manifest = chrome.runtime.getManifest();
   const vSpan = document.getElementById('app-version');
   if (vSpan && manifest && manifest.version) vSpan.textContent = 'v' + manifest.version;
+
+  // Inicializa inputs de data com hoje como padrão
+  const todayISO = new Date().toISOString().slice(0, 10);
+  if ($('pDateFrom') && !$('pDateFrom').value) $('pDateFrom').value = todayISO;
+  if ($('pDateTo')   && !$('pDateTo').value)   $('pDateTo').value   = todayISO;
 
   const res = await chrome.storage.local.get(['saipos_status']);
   if (res.saipos_status) {

@@ -539,6 +539,76 @@
     }));
   }, true); // true = capture phase: dispara antes do ng-click (bubble)
 
+  // --- Preenche formulário de datas do Saipos via Angular (disparado pelo content script) ---
+  window.addEventListener('__saipos_fill_form', function(e) {
+    var detail = e.detail || {};
+    var dateFrom = detail.dateFrom; // 'YYYY-MM-DD'
+    var dateTo   = detail.dateTo;   // 'YYYY-MM-DD'
+
+    // Converte YYYY-MM-DD → dd/MM/yyyy (formato esperado pelo datepicker)
+    function isoToDisplay(iso) {
+      if (!iso) return '';
+      var p = iso.split('-');
+      return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : iso;
+    }
+
+    // Define valor no input Angular do datepicker
+    function setAngularDate(inputId, displayVal) {
+      var el = document.getElementById(inputId);
+      if (!el) return;
+      try {
+        if (typeof angular !== 'undefined') {
+          var scope = angular.element(el).scope();
+          if (scope && scope.$apply) {
+            scope.$apply(function() {
+              if (scope.dateString !== undefined) scope.dateString = displayVal;
+            });
+          }
+        }
+      } catch(err) {}
+      // Dispara eventos nativos como fallback
+      el.value = displayVal;
+      ['input', 'change'].forEach(function(t) {
+        el.dispatchEvent(new Event(t, { bubbles: true }));
+      });
+    }
+
+    if (dateFrom) setAngularDate('datePickerSaipos_1', isoToDisplay(dateFrom));
+    if (dateTo)   setAngularDate('datePickerSaipos_2', isoToDisplay(dateTo));
+
+    // Após 700ms (Angular processar): desmarca "Vendas canceladas" e clica Pesquisar
+    setTimeout(function() {
+      // Desmarca checkbox "Vendas canceladas"
+      var labels = document.querySelectorAll('label');
+      for (var i = 0; i < labels.length; i++) {
+        if (/cancelad/i.test(labels[i].textContent || '')) {
+          var cb = labels[i].querySelector('input[type="checkbox"]');
+          if (!cb) { var f = labels[i].getAttribute('for'); if (f) cb = document.getElementById(f); }
+          if (cb && cb.checked) {
+            try {
+              var ngm = cb.getAttribute('ng-model');
+              var cbs = angular.element(cb).scope();
+              if (cbs && ngm) { cbs.$apply(function() { cbs[ngm] = false; }); }
+              else { cb.click(); }
+            } catch(ex) { cb.click(); }
+          }
+          break;
+        }
+      }
+
+      // Clica no botão Pesquisar
+      var btns = document.querySelectorAll('button');
+      for (var j = 0; j < btns.length; j++) {
+        if (/pesquisar|filtrar|buscar|search/i.test((btns[j].textContent || '').trim())) {
+          btns[j].click();
+          break;
+        }
+      }
+
+      window.dispatchEvent(new CustomEvent('__saipos_form_filled', {}));
+    }, 700);
+  });
+
   // --- Proxy fetch para content script (ISOLATED world) ---
   // Executa fetch no contexto MAIN (mesmos cookies/origin do SPA)
   window.addEventListener('__saipos_fetch_request', function(e) {

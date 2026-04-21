@@ -208,6 +208,16 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
 .spt-confirm-box h3{font-size:14px;margin-bottom:8px;color:var(--txt)}
 .spt-confirm-box p{font-size:11px;color:var(--muted);line-height:1.6;margin-bottom:16px}
 .spt-confirm-btns{display:flex;gap:8px}
+/* ─── Filtro de data/tipo ─── */
+.df-wrap{padding:10px 14px;background:var(--s1);border-bottom:1px solid var(--bord)}
+.df-row{display:flex;gap:8px;margin-bottom:6px}
+.df-row:last-child{margin-bottom:0}
+.df-grp{flex:1;display:flex;flex-direction:column;gap:3px}
+.df-grp label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:700}
+.df-inp{padding:5px 7px;border:1px solid var(--bord);border-radius:5px;background:var(--s2);
+        color:var(--txt);font-size:11px;font-family:'IBM Plex Sans',sans-serif;width:100%}
+.df-inp:focus{outline:none;border-color:var(--acc)}
+
 /* ─── Happy Hour ─── */
 .hh-form{padding:20px 16px;background:linear-gradient(135deg, rgba(0,163,255,.05), rgba(2,132,199,.05));border-bottom:1px solid var(--bord);
          backdrop-filter:blur(8px)}
@@ -277,7 +287,7 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
 
 <div class="panel active" id="panel-resumo">
   <div class="url-warn" id="urlWarn">
-    ⚠️ Acesse <b>conta.saipos.com/#/app/report/sales-by-period</b>, aplique o filtro de datas e clique em INICIAR.
+    ⚠️ Preencha as datas abaixo e clique em INICIAR — a extensão vai navegar automaticamente para o Saipos.
   </div>
 
   <div class="status-row">
@@ -294,6 +304,28 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
     <span class="api-dot" id="apiDot"></span>
     <span id="apiLabel">API: aguardando...</span>
     <button class="btn-test" id="bTest">TESTAR API</button>
+  </div>
+
+  <!-- Filtros de data/hora/tipo — preenchidos antes de INICIAR -->
+  <div class="df-wrap">
+    <div class="df-row">
+      <div class="df-grp"><label>📅 Data inicial</label><input type="date" id="pDateFrom" class="df-inp"></div>
+      <div class="df-grp"><label>📅 Data final</label><input type="date" id="pDateTo" class="df-inp"></div>
+    </div>
+    <div class="df-row">
+      <div class="df-grp"><label>⏰ Hora inicial</label><input type="time" id="pTimeFrom" class="df-inp"></div>
+      <div class="df-grp"><label>⏰ Hora final</label><input type="time" id="pTimeTo" class="df-inp"></div>
+    </div>
+    <div class="df-row">
+      <div class="df-grp" style="flex:1">
+        <label>🏷️ Tipo de atendimento</label>
+        <select id="pSaleType" class="df-inp">
+          <option value="all">Todos</option>
+          <option value="delivery">Entrega (Delivery)</option>
+          <option value="table">Mesa / Local</option>
+        </select>
+      </div>
+    </div>
   </div>
 
   <div class="btns">
