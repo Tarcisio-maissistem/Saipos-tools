@@ -3,6 +3,7 @@ let allSales = [];
 let allDateRange = null;
 let isRunning = false;
 let isPaused  = false;
+let currentSaleTypeFilter = 'all'; // 'all' | '1'=Entrega | '2'=Retirada | '3'=Salão | '4'=Ficha
 
 // ── Catraca: estado inicial (sobrescrito por loadLockConfig) ──
 const TAB_LABELS = { log: 'LOG', resumo: 'COMISSÕES', happyhour: 'HAPPY HOUR', csv: 'IMPORTAR', entrega: 'ENTREGA', estoque: 'ESTOQUE' };
@@ -118,7 +119,8 @@ $('bStart').addEventListener('click', async () => {
   const dateTo   = $('pDateTo').value;
   const timeFrom = $('pTimeFrom').value;
   const timeTo   = $('pTimeTo').value;
-  const saleType = $('pSaleType').value;  // 'all' | 'delivery' | 'table'
+  const saleType = $('pSaleType').value;  // 'all' | '1'=Entrega | '2'=Retirada | '3'=Salão | '4'=Ficha
+  currentSaleTypeFilter = saleType; // guarda para filtrar no DONE
 
   allSales = [];
   $('log-content').innerHTML = '';
@@ -308,7 +310,9 @@ chrome.runtime.onMessage.addListener(msg => {
   }
   if (msg.type === 'DONE') {
     if (allSales.length > 0 && msg.sales) return; // Prevent double DONE (background re-broadcasts)
-    allSales  = msg.sales;
+    // Aplica filtro de tipo de atendimento se selecionado
+    const typeNum = currentSaleTypeFilter !== 'all' ? Number(currentSaleTypeFilter) : null;
+    allSales  = typeNum ? (msg.sales || []).filter(s => s.saleType === typeNum) : (msg.sales || []);
     allDateRange = msg.dateRange || null;
     isRunning = false;
     setStatus('done', `✅ ${allSales.length} vendas concluídas`);

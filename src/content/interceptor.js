@@ -576,26 +576,8 @@
     if (dateFrom) setAngularDate('datePickerSaipos_1', isoToDisplay(dateFrom));
     if (dateTo)   setAngularDate('datePickerSaipos_2', isoToDisplay(dateTo));
 
-    // Após 700ms (Angular processar): desmarca "Vendas canceladas" e clica Pesquisar
+    // Após 700ms (Angular processar): clica Pesquisar
     setTimeout(function() {
-      // Desmarca checkbox "Vendas canceladas"
-      var labels = document.querySelectorAll('label');
-      for (var i = 0; i < labels.length; i++) {
-        if (/cancelad/i.test(labels[i].textContent || '')) {
-          var cb = labels[i].querySelector('input[type="checkbox"]');
-          if (!cb) { var f = labels[i].getAttribute('for'); if (f) cb = document.getElementById(f); }
-          if (cb && cb.checked) {
-            try {
-              var ngm = cb.getAttribute('ng-model');
-              var cbs = angular.element(cb).scope();
-              if (cbs && ngm) { cbs.$apply(function() { cbs[ngm] = false; }); }
-              else { cb.click(); }
-            } catch(ex) { cb.click(); }
-          }
-          break;
-        }
-      }
-
       // Clica no botão Pesquisar
       var btns = document.querySelectorAll('button');
       for (var j = 0; j < btns.length; j++) {
