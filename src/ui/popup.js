@@ -3,7 +3,7 @@ let allSales = [];
 let allDateRange = null;
 let isRunning = false;
 let isPaused  = false;
-let currentSaleTypeFilter = 'all'; // 'all' | '1'=Entrega | '2'=Retirada | '3'=Salão | '4'=Ficha
+let currentSaleTypes = []; // [] = todos; ex: [1,3] = Entrega + Salão
 
 // ── Catraca: estado inicial (sobrescrito por loadLockConfig) ──
 const TAB_LABELS = { log: 'LOG', resumo: 'COMISSÕES', happyhour: 'HAPPY HOUR', csv: 'IMPORTAR', entrega: 'ENTREGA', estoque: 'ESTOQUE' };
@@ -119,8 +119,9 @@ $('bStart').addEventListener('click', async () => {
   const dateTo   = $('pDateTo').value;
   const timeFrom = $('pTimeFrom').value;
   const timeTo   = $('pTimeTo').value;
-  const saleType = $('pSaleType').value;  // 'all' | '1'=Entrega | '2'=Retirada | '3'=Salão | '4'=Ficha
-  currentSaleTypeFilter = saleType; // guarda para filtrar no DONE
+  // Lê checkboxes de tipo marcados; [] = todos
+  const saleTypes = Array.from(document.querySelectorAll('#pSaleTypes input:checked')).map(el => Number(el.value));
+  currentSaleTypes = saleTypes;
 
   allSales = [];
   $('log-content').innerHTML = '';
@@ -133,7 +134,7 @@ $('bStart').addEventListener('click', async () => {
   chrome.runtime.sendMessage({ type: 'RESET' }).catch(() => {});
 
   // Salva parâmetros para uso nos relatórios (tempo e tipo)
-  await chrome.storage.local.set({ saiposSearchParams: { dateFrom, dateTo, timeFrom, timeTo, saleType } });
+  await chrome.storage.local.set({ saiposSearchParams: { dateFrom, dateTo, timeFrom, timeTo, saleTypes } });
 
   const TARGET = 'https://conta.saipos.com/#/app/report/sales-by-period';
   let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -159,7 +160,7 @@ $('bStart').addEventListener('click', async () => {
     for (let i = 0; i < 20; i++) { // até 10s
       await new Promise(r => setTimeout(r, 500));
       const res = await chrome.tabs.sendMessage(tab.id, {
-        action: 'FILL_AND_SEARCH', dateFrom, dateTo, saleType
+        action: 'FILL_AND_SEARCH', dateFrom, dateTo, saleTypes
       }).catch(() => null);
       if (res && res.ok) { filled = true; break; }
     }
@@ -310,9 +311,10 @@ chrome.runtime.onMessage.addListener(msg => {
   }
   if (msg.type === 'DONE') {
     if (allSales.length > 0 && msg.sales) return; // Prevent double DONE (background re-broadcasts)
-    // Aplica filtro de tipo de atendimento se selecionado
-    const typeNum = currentSaleTypeFilter !== 'all' ? Number(currentSaleTypeFilter) : null;
-    allSales  = typeNum ? (msg.sales || []).filter(s => s.saleType === typeNum) : (msg.sales || []);
+    // Filtra por tipos selecionados ([] = todos)
+    allSales = currentSaleTypes.length > 0
+      ? (msg.sales || []).filter(s => currentSaleTypes.includes(s.saleType))
+      : (msg.sales || []);
     allDateRange = msg.dateRange || null;
     isRunning = false;
     setStatus('done', `✅ ${allSales.length} vendas concluídas`);

@@ -1466,7 +1466,7 @@
       (async () => {
         // Dispara para o interceptor (MAIN world) preencher o Angular form e clicar Pesquisar
         window.dispatchEvent(new CustomEvent('__saipos_fill_form', {
-          detail: { dateFrom: msg.dateFrom || '', dateTo: msg.dateTo || '', saleType: msg.saleType || 'all' }
+          detail: { dateFrom: msg.dateFrom || '', dateTo: msg.dateTo || '', saleTypes: msg.saleTypes || [] }
         }));
         // Aguarda API ser capturada (até 10s) — o interceptor escreve dataset após cada call
         const prevIdx = parseInt(document.documentElement.dataset.saiposLastSalesIdx || '-1');

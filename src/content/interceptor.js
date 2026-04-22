@@ -541,9 +541,10 @@
 
   // --- Preenche formulário de datas do Saipos via Angular (disparado pelo content script) ---
   window.addEventListener('__saipos_fill_form', function(e) {
-    var detail = e.detail || {};
-    var dateFrom = detail.dateFrom; // 'YYYY-MM-DD'
-    var dateTo   = detail.dateTo;   // 'YYYY-MM-DD'
+    var detail   = e.detail || {};
+    var dateFrom = detail.dateFrom;   // 'YYYY-MM-DD'
+    var dateTo   = detail.dateTo;     // 'YYYY-MM-DD'
+    var saleTypes = detail.saleTypes || []; // [] = todos; ex: [1,2]
 
     // Converte YYYY-MM-DD → dd/MM/yyyy (formato esperado pelo datepicker)
     function isoToDisplay(iso) {
@@ -576,9 +577,59 @@
     if (dateFrom) setAngularDate('datePickerSaipos_1', isoToDisplay(dateFrom));
     if (dateTo)   setAngularDate('datePickerSaipos_2', isoToDisplay(dateTo));
 
-    // Após 700ms (Angular processar): clica Pesquisar
+    // Após 700ms (Angular processar): ajusta filtros e clica Pesquisar
     setTimeout(function() {
-      // Clica no botão Pesquisar
+
+      // Utilitário: define estado de um checkbox via Angular ou .click()
+      function setCheckbox(cb, desiredChecked) {
+        if (!cb || cb.checked === desiredChecked) return;
+        try {
+          var ngm = cb.getAttribute('ng-model');
+          var scope = typeof angular !== 'undefined' && angular.element(cb).scope();
+          if (scope && ngm) {
+            // suporta ng-model com ponto: "filter.canceled"
+            var parts = ngm.split('.');
+            scope.$apply(function() {
+              var obj = scope;
+              for (var k = 0; k < parts.length - 1; k++) { obj = obj[parts[k]] || obj; }
+              obj[parts[parts.length - 1]] = desiredChecked;
+            });
+          } else { cb.click(); }
+        } catch(ex) { cb.click(); }
+      }
+
+      // Utilitário: encontra checkbox pelo texto do label pai
+      function findCbByLabel(pattern) {
+        var labels = document.querySelectorAll('label');
+        for (var i = 0; i < labels.length; i++) {
+          if (pattern.test(labels[i].textContent || '')) {
+            var cb = labels[i].querySelector('input[type="checkbox"]');
+            if (!cb) { var f = labels[i].getAttribute('for'); if (f) cb = document.getElementById(f); }
+            if (cb) return cb;
+          }
+        }
+        return null;
+      }
+
+      // ── Desmarca "Vendas canceladas" no painel Status da venda
+      var cbCancelada = findCbByLabel(/cancelad/i);
+      if (cbCancelada) setCheckbox(cbCancelada, false);
+
+      // ── Tipos de atendimento: só altera se o usuário selecionou tipos específicos
+      if (saleTypes.length > 0) {
+        var tipoMap = [
+          { pattern: /\bentrega\b|delivery/i,           type: 1 },
+          { pattern: /retirada|balc[aã]o|pickup/i,      type: 2 },
+          { pattern: /sal[aã]o|mesa|local/i,             type: 3 },
+          { pattern: /ficha/i,                           type: 4 }
+        ];
+        tipoMap.forEach(function(m) {
+          var cb = findCbByLabel(m.pattern);
+          if (cb) setCheckbox(cb, saleTypes.indexOf(m.type) !== -1);
+        });
+      }
+
+      // ── Clica no botão Pesquisar
       var btns = document.querySelectorAll('button');
       for (var j = 0; j < btns.length; j++) {
         if (/pesquisar|filtrar|buscar|search/i.test((btns[j].textContent || '').trim())) {
