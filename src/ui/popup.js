@@ -320,11 +320,13 @@ chrome.runtime.onMessage.addListener(msg => {
     setStatus('done', `✅ ${allSales.length} vendas concluídas`);
     setButtons(false);
     renderResumo(allSales);
-    addLog({ msg: `🎉 Pronto! ${allSales.length} vendas · abrindo relatório...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
-    
-    // Abre relatório automaticamente
+    // Se somente Entrega selecionada → abre rel. entrega; caso contrário → comissões
+    const onlyEntrega = currentSaleTypes.length === 1 && currentSaleTypes[0] === 1;
+    addLog({ msg: `🎉 Pronto! ${allSales.length} vendas · abrindo ${onlyEntrega ? 'rel. entrega' : 'relatório'}...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
+
     setTimeout(() => {
-      $('bReport').click();
+      if (onlyEntrega) $('bDeliveryReport').click();
+      else             $('bReport').click();
     }, 500);
   }
 });
