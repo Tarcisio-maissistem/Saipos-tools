@@ -23,6 +23,32 @@ function isIsento(nome) {
   return PRODUTOS_ISENTOS.some(p => n.includes(p));
 }
 
+function getSaleTime(dateText, withSeconds = false) {
+  const text = String(dateText || '').trim();
+  if (!text) return '';
+  const match = text.match(/(\d{2}:\d{2})(?::(\d{2}))?/);
+  if (!match) return '';
+  if (!withSeconds) return match[1];
+  return match[2] ? `${match[1]}:${match[2]}` : match[1];
+}
+
+function filterSalesByTimeRange(sales, timeFrom, timeTo) {
+  if (!timeFrom && !timeTo) return Array.isArray(sales) ? [...sales] : [];
+  return (sales || []).filter(sale => {
+    const hora = getSaleTime(sale.dateText);
+    if (!hora) return true;
+    if (timeFrom && hora < timeFrom) return false;
+    if (timeTo && hora > timeTo) return false;
+    return true;
+  });
+}
+
+function getSalesForCurrentFilters(sales = allSales) {
+  const timeFrom = $('pTimeFrom') ? $('pTimeFrom').value : '';
+  const timeTo = $('pTimeTo') ? $('pTimeTo').value : '';
+  return filterSalesByTimeRange(sales, timeFrom, timeTo);
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 function setStatus(st, label) {
   $('dot').className = 'dot ' + (st || '');
@@ -134,7 +160,11 @@ $('bStart').addEventListener('click', async () => {
   chrome.runtime.sendMessage({ type: 'RESET' }).catch(() => {});
 
   // Salva parâmetros para uso nos relatórios (tempo e tipo)
-  await chrome.storage.local.set({ saiposSearchParams: { dateFrom, dateTo, timeFrom, timeTo, saleTypes } });
+  await chrome.storage.local.set({
+    saiposSearchParams: { dateFrom, dateTo, timeFrom, timeTo, saleTypes },
+    saiposReportTimeFrom: timeFrom,
+    saiposReportTimeTo: timeTo
+  });
 
   const TARGET = 'https://conta.saipos.com/#/app/report/sales-by-period';
   let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -208,7 +238,8 @@ $('btnClearLog').addEventListener('click', () => {
 
 // ── RELATÓRIO ENTREGAS ─────────────────────────────────────────────
 $('bDeliveryReport').addEventListener('click', async () => {
-  if (allSales.length === 0) return;
+  const filteredSales = getSalesForCurrentFilters(allSales);
+  if (filteredSales.length === 0) return;
 
   // Extrai nome da loja do DOM (mesmo método do relatório de comissões)
   let storeName = 'Loja Saipos';
@@ -227,9 +258,9 @@ $('bDeliveryReport').addEventListener('click', async () => {
   } catch (_) {}
 
   // Filter: only delivery type (saleType === 1) and NOT canceled
-  let deliverySales = allSales.filter(s => !s.canceled && s.saleType === 1);
+  let deliverySales = filteredSales.filter(s => !s.canceled && s.saleType === 1);
   const isFallback = deliverySales.length === 0;
-  if (isFallback) deliverySales = allSales.filter(s => !s.canceled);
+  if (isFallback) deliverySales = filteredSales.filter(s => !s.canceled);
 
   // Enriquece entregadores ausentes via fetch individual (API por saleId)
   const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -258,7 +289,8 @@ $('bDeliveryReport').addEventListener('click', async () => {
   chrome.tabs.create({ url: chrome.runtime.getURL('pages/delivery-report.html') });
 });
 $('bReport').addEventListener('click', async () => {
-  if (allSales.length === 0) return;
+  const filteredSales = getSalesForCurrentFilters(allSales);
+  if (filteredSales.length === 0) return;
 
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
@@ -286,10 +318,12 @@ $('bReport').addEventListener('click', async () => {
   // Salva dados no storage para a página de relatório
   await chrome.storage.local.set({
     saiposReportData: {
-      sales: allSales,
+      sales: filteredSales,
       storeName: storeName,
       dateRange: allDateRange
-    }
+    },
+    saiposReportTimeFrom: $('pTimeFrom').value || '',
+    saiposReportTimeTo: $('pTimeTo').value || ''
   });
 
   // Abre a página de relatório (CSP-compliant)
@@ -315,14 +349,16 @@ chrome.runtime.onMessage.addListener(msg => {
     allSales = currentSaleTypes.length > 0
       ? (msg.sales || []).filter(s => currentSaleTypes.includes(s.saleType))
       : (msg.sales || []);
+    const filteredSales = getSalesForCurrentFilters(allSales);
     allDateRange = msg.dateRange || null;
     isRunning = false;
-    setStatus('done', `✅ ${allSales.length} vendas concluídas`);
+    setStatus('done', `✅ ${filteredSales.length} vendas concluídas`);
     setButtons(false);
-    renderResumo(allSales);
+    renderResumo(filteredSales);
+    renderAlertas(filteredSales);
     // Se somente Entrega selecionada → abre rel. entrega; caso contrário → comissões
     const onlyEntrega = currentSaleTypes.length === 1 && currentSaleTypes[0] === 1;
-    addLog({ msg: `🎉 Pronto! ${allSales.length} vendas · abrindo ${onlyEntrega ? 'rel. entrega' : 'relatório'}...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
+    addLog({ msg: `🎉 Pronto! ${filteredSales.length} vendas · abrindo ${onlyEntrega ? 'rel. entrega' : 'relatório'}...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
 
     setTimeout(() => {
       if (onlyEntrega) $('bDeliveryReport').click();
@@ -373,6 +409,9 @@ function renderResumo(sales) {
 
 // ── Render Alertas ───────────────────────────────────────────
 function renderAlertas(sales) {
+  const panel = $('panel-alertas');
+  if (!panel) return;
+
   const semTaxa   = sales.filter(s => !s.canceled && s.totalItens > 0 && s.taxa === 0);
   const baixaTaxa = sales.filter(s => {
     if (s.canceled || s.totalItens === 0) return false;
@@ -380,8 +419,6 @@ function renderAlertas(sales) {
     return p > 0 && p < 9.95;
   });
   const canceladas = sales.filter(s => s.canceled);
-
-  const panel = $('panel-alertas');
 
   if (!semTaxa.length && !baixaTaxa.length && !canceladas.length) {
     panel.innerHTML = '<div class="empty"><big>✅</big>Sem alertas!</div>';
@@ -394,7 +431,7 @@ function renderAlertas(sales) {
     h += `<div class="sec-label">❌ Sem taxa (${semTaxa.length})</div>
     <table class="alert-tbl"><thead><tr><th>Mesa</th><th>Cmd</th><th>Horário</th><th>Itens</th><th>Taxa</th></tr></thead><tbody>`;
     for (const s of semTaxa) {
-      h += `<tr><td>M${s.mesa}</td><td>C${s.comanda}</td><td>${(s.dateText||'').substring(11)}</td>
+      h += `<tr><td>M${s.mesa}</td><td>C${s.comanda}</td><td>${getSaleTime(s.dateText, true)}</td>
             <td>R$ ${fmt(s.totalItens)}</td><td><span class="badge b-zero">0%</span></td></tr>`;
     }
     h += '</tbody></table>';
@@ -405,7 +442,7 @@ function renderAlertas(sales) {
     <table class="alert-tbl"><thead><tr><th>Mesa</th><th>Cmd</th><th>Horário</th><th>Itens</th><th>%</th></tr></thead><tbody>`;
     for (const s of baixaTaxa) {
       const p = (s.taxa / s.totalItens * 100).toFixed(1).replace('.',',');
-      h += `<tr><td>M${s.mesa}</td><td>C${s.comanda}</td><td>${(s.dateText||'').substring(11)}</td>
+      h += `<tr><td>M${s.mesa}</td><td>C${s.comanda}</td><td>${getSaleTime(s.dateText, true)}</td>
             <td>R$ ${fmt(s.totalItens)}</td><td><span class="badge b-low">${p}%</span></td></tr>`;
     }
     h += '</tbody></table>';
@@ -415,7 +452,7 @@ function renderAlertas(sales) {
     h += `<div class="sec-label">🚫 Canceladas (${canceladas.length})</div>
     <table class="alert-tbl"><thead><tr><th>Mesa</th><th>Cmd</th><th>Horário</th><th>Total</th></tr></thead><tbody>`;
     for (const s of canceladas) {
-      h += `<tr><td>M${s.mesa}</td><td>C${s.comanda}</td><td>${(s.dateText||'').substring(11)}</td>
+      h += `<tr><td>M${s.mesa}</td><td>C${s.comanda}</td><td>${getSaleTime(s.dateText, true)}</td>
             <td>R$ ${fmt(s.total)}</td></tr>`;
     }
     h += '</tbody></table>';
@@ -461,10 +498,11 @@ async function restoreState() {
     // Restaura se já terminou
     if (state.status === 'done' && state.sales && state.sales.length > 0) {
       allSales = state.sales;
-      setStatus('done', `✅ ${allSales.length} vendas concluídas`);
+      const filteredSales = getSalesForCurrentFilters(allSales);
+      setStatus('done', `✅ ${filteredSales.length} vendas concluídas`);
       setButtons(false);
-      renderResumo(allSales);
-      renderAlertas(allSales);
+      renderResumo(filteredSales);
+      renderAlertas(filteredSales);
     }
 
   } catch (e) {
@@ -777,11 +815,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   if ($('pDateFrom') && !$('pDateFrom').value) $('pDateFrom').value = todayISO;
   if ($('pDateTo')   && !$('pDateTo').value)   $('pDateTo').value   = todayISO;
 
-  const res = await chrome.storage.local.get(['saipos_status']);
+  const res = await chrome.storage.local.get(['saipos_status', 'saiposSearchParams']);
   if (res.saipos_status) {
     isRunning = res.saipos_status.running;
     if (res.saipos_status.sales) allSales = res.saipos_status.sales;
   }
+  if (res.saiposSearchParams) {
+    const params = res.saiposSearchParams;
+    if ($('pDateFrom') && params.dateFrom) $('pDateFrom').value = params.dateFrom;
+    if ($('pDateTo') && params.dateTo) $('pDateTo').value = params.dateTo;
+    if ($('pTimeFrom')) $('pTimeFrom').value = params.timeFrom || '';
+    if ($('pTimeTo')) $('pTimeTo').value = params.timeTo || '';
+    if (Array.isArray(params.saleTypes) && params.saleTypes.length > 0) {
+      currentSaleTypes = params.saleTypes.map(Number).filter(n => !Number.isNaN(n));
+      document.querySelectorAll('#pSaleTypes input').forEach(el => {
+        el.checked = currentSaleTypes.includes(Number(el.value));
+      });
+    }
+  }
+  await restoreState();
   
   await loadPromos(); // carrega de local ou sync (com fallback automático)
 });
@@ -1154,6 +1206,5 @@ $('lcClose').addEventListener('click', () => {
 
 // ── Init ─────────────────────────────────────────────────────
 checkUrl();
-restoreState();
 initHH();
 loadLockConfig();

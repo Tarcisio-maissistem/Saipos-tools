@@ -7,6 +7,10 @@ let selectedGarcom = 'TODOS';
 let pctGarcomOverride = null; // null = dinâmico (usa taxa proporcional); número = % fixa do total de itens
 let pctCozinha = null;        // null = ignorado; número = % fixa sobre total de itens para a cozinha
 
+// Filtros de horário
+let TIME_FROM = '';
+let TIME_TO = '';
+
 // Produtos isentos de comissão/taxa de serviço
 const PRODUTOS_ISENTOS = [
   'COUVERT ARTÍSTICO', 'COUVERT ARTISTICO',
@@ -51,6 +55,45 @@ function fmtComanda(c) {
   return isNaN(num) ? c : pad2(num);
 }
 
+function getSaleDate(dateText) {
+  const text = String(dateText || '').trim();
+  if (!text) return 'Sem data';
+
+  const brMatch = text.match(/(\d{2}\/\d{2}\/\d{4})/);
+  if (brMatch) return brMatch[1];
+
+  const isoMatch = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+
+  return text.substring(0, 10) || 'Sem data';
+}
+
+function getSaleTime(dateText, withSeconds = false) {
+  const text = String(dateText || '').trim();
+  if (!text) return '';
+
+  const match = text.match(/(\d{2}:\d{2})(?::(\d{2}))?/);
+  if (!match) return '';
+
+  if (!withSeconds) return match[1];
+  return match[2] ? `${match[1]}:${match[2]}` : match[1];
+}
+
+function saleMatchesTimeFilter(sale) {
+  if (!TIME_FROM && !TIME_TO) return true;
+
+  const hora = getSaleTime(sale && sale.dateText);
+  if (!hora) return true;
+
+  if (TIME_FROM && hora < TIME_FROM) return false;
+  if (TIME_TO && hora > TIME_TO) return false;
+  return true;
+}
+
+function getFilteredSales() {
+  return SALES_DATA.filter(saleMatchesTimeFilter);
+}
+
 function pctClass(pct, canceled) {
   if (canceled) return 'c-cancel';
   if (pct === 0) return 'c-zero';
@@ -64,11 +107,14 @@ function pctLabel(pct, canceled) {
 }
 
 // Carrega dados do storage
-chrome.storage.local.get(['saiposReportData'], function(result) {
+chrome.storage.local.get(['saiposReportData', 'saiposReportTimeFrom', 'saiposReportTimeTo', 'saiposSearchParams'], function(result) {
   if (result.saiposReportData) {
     SALES_DATA = result.saiposReportData.sales || [];
     STORE_NAME = result.saiposReportData.storeName || 'Loja Saipos';
     DATE_RANGE = result.saiposReportData.dateRange || null;
+    // Carrega filtros de horário se existirem
+    TIME_FROM = result.saiposReportTimeFrom || (result.saiposSearchParams && result.saiposSearchParams.timeFrom) || '';
+    TIME_TO = result.saiposReportTimeTo || (result.saiposSearchParams && result.saiposSearchParams.timeTo) || '';
     if (DATE_RANGE && DATE_RANGE.start && DATE_RANGE.end) {
       const fd = (d) => { const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
       document.title = 'Relatório ' + fd(DATE_RANGE.start) + ' a ' + fd(DATE_RANGE.end) + ' – Saipos Tools';
@@ -80,9 +126,9 @@ chrome.storage.local.get(['saiposReportData'], function(result) {
   }
 });
 
-function getGlobalGarcom() {
+function getGlobalGarcom(sales = getFilteredSales()) {
   const globalGarcom = {};
-  for (const sale of SALES_DATA) {
+  for (const sale of sales) {
     if (sale.canceled || !sale.items) continue;
     const totalNaoIsento = calcTotalNaoIsento(sale.items);
     for (const item of sale.items) {
@@ -101,13 +147,14 @@ function getGlobalGarcom() {
 }
 
 function renderReport() {
-  const sales = SALES_DATA;
+  // Aplica filtro de horário se definido
+  const sales = getFilteredSales();
   const storeName = STORE_NAME;
-  const globalGarcom = getGlobalGarcom();
+  const globalGarcom = getGlobalGarcom(sales);
   
   const byDate = {};
   for (const s of sales) {
-    const dia = (s.dateText || 'Sem data').substring(0, 10);
+    const dia = getSaleDate(s.dateText);
     if (!byDate[dia]) byDate[dia] = [];
     byDate[dia].push(s);
   }
@@ -137,7 +184,7 @@ function renderReport() {
     const fmtDate = (d) => { const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
     periodoLabel = fmtDate(DATE_RANGE.start) + ' a ' + fmtDate(DATE_RANGE.end);
   } else {
-    const dates = sales.filter(s => s.dateText).map(s => s.dateText.substring(0, 10)).sort();
+    const dates = sales.filter(s => s.dateText).map(s => getSaleDate(s.dateText)).sort();
     if (dates.length > 0) periodoLabel = dates[0] + ' a ' + dates[dates.length - 1];
   }
 
@@ -268,7 +315,7 @@ function renderReport() {
 
     for (const sale of dsales) {
       const pct = sale.totalItens > 0 ? sale.taxa / sale.totalItens * 100 : 0;
-      const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11) : '';
+      const hora = getSaleTime(sale.dateText, true);
 
       let vendaTemGarcom = selectedGarcom === 'TODOS';
       if (!vendaTemGarcom && sale.items) {
@@ -279,6 +326,7 @@ function renderReport() {
           }
         }
       }
+      // Filtro de horário também na visualização por segurança
 
       H += `<div class="venda-wrap" style="${vendaTemGarcom ? '' : 'display:none'}">
 <div class="venda-head">
@@ -465,7 +513,7 @@ function renderReport() {
         dayGarcomPrint[g].venda += vt;
         dayGarcomPrint[g].comissao += ci;
         dayGarcomPrint[g].itens.push({
-          hora: sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11, 16) : '',
+          hora: getSaleTime(sale.dateText, true),
           mesa: fmtMesa(sale.mesa),
           comanda: fmtComanda(sale.comanda),
           nome: item.nome + (exempt ? ' *' : ''),
@@ -604,9 +652,10 @@ function setupEventListeners() {
 
 function salvarPDF() {
   // Obter período das datas do relatório
+  const sales = getFilteredSales();
   const byDate = {};
-  for (const s of SALES_DATA) {
-    const dia = (s.dateText || 'Sem data').substring(0, 10);
+  for (const s of sales) {
+    const dia = getSaleDate(s.dateText);
     if (!byDate[dia]) byDate[dia] = [];
     byDate[dia].push(s);
   }
@@ -705,7 +754,7 @@ function renderIndividualGarcom(garcom) {
   let totalVenda = 0, totalComissao = 0, totalItens = 0;
   let minDate = null, maxDate = null;
   
-  for (const sale of SALES_DATA) {
+  for (const sale of getFilteredSales()) {
     if (sale.canceled || !sale.items) continue;
     const totalNaoIsento = calcTotalNaoIsento(sale.items);
     
@@ -714,8 +763,8 @@ function renderIndividualGarcom(garcom) {
       const g = (item.garcom || '?').toUpperCase().trim();
       if (g !== garcom) continue;
       
-      const dia = (sale.dateText || 'Sem data').substring(0, 10);
-      const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11, 16) : '';
+      const dia = getSaleDate(sale.dateText);
+      const hora = getSaleTime(sale.dateText, true);
       const vt = item.valor * item.qtd;
       const exempt = isIsento(item.nome);
       const ci = calcCi(vt, exempt, totalNaoIsento, sale.taxa);
@@ -858,7 +907,7 @@ function copiarGarcom(garcomEncoded, btn) {
   const byDate = {};
   let totalVenda = 0, totalComissao = 0, totalItens = 0;
 
-  for (const sale of SALES_DATA) {
+  for (const sale of getFilteredSales()) {
     if (sale.canceled || !sale.items) continue;
     const totalNaoIsento = calcTotalNaoIsento(sale.items);
     for (const item of sale.items) {
@@ -866,8 +915,8 @@ function copiarGarcom(garcomEncoded, btn) {
       const g = (item.garcom || '?').toUpperCase().trim();
       if (g !== garcom) continue;
 
-      const dia = (sale.dateText || 'Sem data').substring(0, 10);
-      const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11,16) : '';
+      const dia = getSaleDate(sale.dateText);
+      const hora = getSaleTime(sale.dateText, true);
       const vt = item.valor * item.qtd;
       const exempt = isIsento(item.nome);
       const ci = calcCi(vt, exempt, totalNaoIsento, sale.taxa);
@@ -929,9 +978,10 @@ function copiarTudo() {
   lines.push('║  📅 Gerado em: ' + ts.padEnd(55) + '║');
   lines.push('╚══════════════════════════════════════════════════════════════════════╝');
 
+  const sales = getFilteredSales();
   const byDate = {};
-  for (const s of SALES_DATA) {
-    const dia = (s.dateText || 'Sem data').substring(0, 10);
+  for (const s of sales) {
+    const dia = getSaleDate(s.dateText);
     if (!byDate[dia]) byDate[dia] = [];
     byDate[dia].push(s);
   }
@@ -954,7 +1004,7 @@ function copiarTudo() {
 
     for (const sale of vendas) {
       const pct = sale.totalItens > 0 ? sale.taxa / sale.totalItens * 100 : 0;
-      const hora = sale.dateText && sale.dateText.length > 10 ? sale.dateText.substring(11) : '';
+      const hora = getSaleTime(sale.dateText, true);
       const status = sale.canceled ? '🚫 CANCELADO' : (pct >= 9.95 ? '✅ ' + pct.toFixed(1).replace('.',',') + '%' : '⚠️ ' + pct.toFixed(1).replace('.',',') + '%');
 
       lines.push('');
@@ -1081,14 +1131,15 @@ function exportarCSVCompleto(btn) {
   const ts = new Date().toISOString().slice(0,10);
   let csv = '';
   const filename = 'saipos_relatorio_completo_' + ts + '.csv';
+  const sales = getFilteredSales();
 
   csv += '=== ITENS DETALHADOS ===\n';
   csv += 'Data;Mesa;Comanda;Hora;Item;Qtde;Garçom;Valor Unit;Total Item;Taxa Venda;Comissão Item;% Taxa;Cancelado;Isento\n';
   
-  for (const sale of SALES_DATA) {
+  for (const sale of sales) {
     if (sale.canceled || !sale.items) continue;
-    const dia = (sale.dateText || '').substring(0, 10);
-    const hora = (sale.dateText || '').substring(11, 19);
+    const dia = getSaleDate(sale.dateText);
+    const hora = getSaleTime(sale.dateText, true);
     const pct = sale.totalItens > 0 ? (sale.taxa / sale.totalItens * 100) : 0;
     const totalNaoIsento = calcTotalNaoIsento(sale.items);
     
@@ -1111,7 +1162,7 @@ function exportarCSVCompleto(btn) {
   csv += 'Garçom;Total Vendido;Total Comissão;Qtd Itens\n';
   
   const garcom = {};
-  for (const sale of SALES_DATA) {
+  for (const sale of sales) {
     if (sale.canceled || !sale.items) continue;
     const totalNaoIsento = calcTotalNaoIsento(sale.items);
     for (const item of sale.items) {
@@ -1136,9 +1187,9 @@ function exportarCSVCompleto(btn) {
   csv += '=== VENDAS ===\n';
   csv += 'Data;Hora;Mesa;Comanda;Pagamento;Total Itens;Taxa Serviço;% Taxa;Status\n';
   
-  for (const sale of SALES_DATA) {
-    const dia = (sale.dateText || '').substring(0, 10);
-    const hora = (sale.dateText || '').substring(11, 19);
+  for (const sale of sales) {
+    const dia = getSaleDate(sale.dateText);
+    const hora = getSaleTime(sale.dateText, true);
     const pct = sale.totalItens > 0 ? (sale.taxa / sale.totalItens * 100) : 0;
     let status = '';
     if (sale.canceled) status = 'CANCELADA';
