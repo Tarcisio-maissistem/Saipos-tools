@@ -38,19 +38,37 @@ function pctLabel(pct, canceled) {
 function gerarRelatorio(sales, storeName = 'Loja Saipos') {
   // Guarda nome da loja globalmente para a função copiarTudo
   window.__SAIPOS_STORE_NAME = storeName;
-  
-  // ── Agrupa por dia ──────────────────────────────────────────
+
+  // === v1.1: Filtro de horário aplicado no relatório ===
+  let TIME_FROM = '';
+  let TIME_TO = '';
+  // Tenta obter do contexto global (caso definido na página)
+  if (typeof window !== 'undefined') {
+    if (window.TIME_FROM) TIME_FROM = window.TIME_FROM;
+    if (window.TIME_TO) TIME_TO = window.TIME_TO;
+  }
+  // Aplica filtro de horário se definido
+  let filteredSales = sales;
+  if (TIME_FROM || TIME_TO) {
+    filteredSales = sales.filter(s => {
+      const hora = s.dateText && s.dateText.length > 10 ? s.dateText.substring(11, 16) : '';
+      if (TIME_FROM && hora && hora < TIME_FROM) return false;
+      if (TIME_TO && hora && hora > TIME_TO) return false;
+      return true;
+    });
+  }
+
+  // === [SAIPOS TOOLS] Correção: todos os totais, alertas e resumos usam apenas vendas filtradas por horário ===
+  // Agrupa por dia
   const byDate = {};
-  for (const s of sales) {
-    // data no formato "DD/MM/YYYY HH:MM:SS" ou "DD/MM/YYYY, HH:MM:SS"
+  for (const s of filteredSales) {
     const dia = (s.dateText || 'Sem data').substring(0, 10);
     if (!byDate[dia]) byDate[dia] = [];
     byDate[dia].push(s);
   }
 
-  // ── Totais globais por garçom ────────────────────────────────
-  const globalGarcom = {}; // { nome: { venda, comissao, qtdItens } }
-
+  // Totais globais por garçom
+  const globalGarcom = {};
   function acumGarcom(nome, venda, comissao) {
     if (!globalGarcom[nome]) globalGarcom[nome] = { venda: 0, comissao: 0, qtd: 0 };
     globalGarcom[nome].venda    += venda;
@@ -58,9 +76,9 @@ function gerarRelatorio(sales, storeName = 'Loja Saipos') {
     globalGarcom[nome].qtd++;
   }
 
-  // ── Contadores de alertas ────────────────────────────────────
+  // Contadores de alertas e totais globais
   let gtItens = 0, gtTaxa = 0, gtCanceladas = 0, gtSemTaxa = 0, gtBaixaTaxa = 0;
-  for (const s of sales) {
+  for (const s of filteredSales) {
     if (s.canceled) { gtCanceladas++; continue; }
     gtItens += s.totalItens;
     gtTaxa  += s.taxa;
@@ -334,14 +352,13 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
     H += `</div></div>`; // date-content, date-block
   }
 
-  // ── Resumo global por garçom ─────────────────────────────────
+  // Resumo global por garçom (usando apenas vendas filtradas)
   H += `<div class="global-title">👤 Resumo Global por Garçom</div>
 <table class="global-table">
 <thead><tr>
   <th>Garçom</th><th class="tr">Total Vendido</th>
   <th class="tr">Total Comissão</th><th class="tc">Itens</th><th class="tc">Ações</th>
 </tr></thead><tbody>`;
-
   for (const [g, v] of Object.entries(globalGarcom).sort((a,b) => b[1].comissao - a[1].comissao)) {
     const gEncoded = encodeURIComponent(g);
     H += `<tr data-garcom="${g}">
@@ -358,14 +375,14 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
     <b>*</b> Produto isento de taxa de serviço — não contabilizado na comissão.
   </div>`;
 
-  // ── Seção de alertas (oculta por padrão) ────────────────────
-  const semTaxa    = sales.filter(s => !s.canceled && s.totalItens > 0 && s.taxa === 0);
-  const baixaTaxa  = sales.filter(s => {
+  // Seção de alertas (usando apenas vendas filtradas)
+  const semTaxa    = filteredSales.filter(s => !s.canceled && s.totalItens > 0 && s.taxa === 0);
+  const baixaTaxa  = filteredSales.filter(s => {
     if (s.canceled || s.totalItens === 0) return false;
     const p = s.taxa / s.totalItens * 100;
     return p > 0 && p < 9.95;
   });
-  const canceladas = sales.filter(s => s.canceled);
+  const canceladas = filteredSales.filter(s => s.canceled);
 
   H += `<div class="alertas-wrap" id="alertasWrap" style="display:none">
   <div class="global-title">⚠️ Alertas</div>`;
@@ -429,29 +446,19 @@ function calcTotalNaoIsento(items) {
 
 // Event Listeners (CSP-compliant, sem onclick inline)
 document.addEventListener('DOMContentLoaded', function() {
-  
-  // Botão Copiar Tudo
-  document.getElementById('btnCopiarTudo').addEventListener('click', copiarTudo);
-  
-  // Botão Imprimir
-  document.getElementById('btnImprimir').addEventListener('click', function() {
-    window.print();
-  });
-  
-  // Botões CSV
-  document.getElementById('btnCSVItens').addEventListener('click', function() {
-    exportarCSV('itens', this);
-  });
-  document.getElementById('btnCSVGarcons').addEventListener('click', function() {
-    exportarCSV('garcons', this);
-  });
-  document.getElementById('btnCSVVendas').addEventListener('click', function() {
-    exportarCSV('vendas', this);
-  });
-  
-  // Botão Alertas
-  document.getElementById('btnAlertas').addEventListener('click', toggleAlertas);
-  
+  // Helper: vincula evento apenas se elemento existir (evita crash por null)
+  function on(id, event, fn) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, fn);
+  }
+
+  on('btnCopiarTudo', 'click', copiarTudo);
+  on('btnImprimir',   'click', function() { window.print(); });
+  on('btnCSVItens',   'click', function() { exportarCSV('itens',   this); });
+  on('btnCSVGarcons', 'click', function() { exportarCSV('garcons', this); });
+  on('btnCSVVendas',  'click', function() { exportarCSV('vendas',  this); });
+  on('btnAlertas',    'click', toggleAlertas);
+
   // Botões de copiar por garçom (delegação de eventos)
   document.querySelectorAll('.btn-copy-garcom').forEach(function(btn) {
     btn.addEventListener('click', function() {
@@ -462,8 +469,9 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function toggleAlertas() {
-  const el = document.getElementById('alertasWrap');
+  const el  = document.getElementById('alertasWrap');
   const btn = document.getElementById('btnAlertas');
+  if (!el || !btn) return; // guarda contra elementos ausentes
   if (el.style.display === 'none') {
     el.style.display = 'block';
     btn.textContent = '✖ Ocultar Alertas';

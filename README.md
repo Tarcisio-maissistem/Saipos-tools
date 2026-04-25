@@ -1,6 +1,6 @@
-# Saipos Tools v6.41.0
+# Saipos Tools v6.49.4
 
-Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Happy Hour Automático**, **Resumo da Conta com Impressão**, **Importação de Produtos** e **Gestão de Estoque**.
+Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Relatório de Entregas**, **Happy Hour Automático**, **Resumo da Conta com Impressão**, **Importação de Produtos** e **Gestão de Estoque**.
 
 ---
 
@@ -25,6 +25,11 @@ Extrai vendas via API, calcula comissões e gera relatório visual completo.
 4. Aguarde a coleta (barra de progresso mostra o andamento)
 5. Clique em **📄 RELATÓRIO** para abrir o relatório completo
 
+### Filtros por tipo de atendimento:
+- **Multi-select**: Entrega / Retirada / Salão / Ficha — selecione um ou mais
+- Canceladas desmarcadas por padrão
+- Quando somente **Entrega** selecionada, abre o Relatório de Entregas automaticamente
+
 ### O relatório inclui:
 - Resumo por garçom (total vendido, comissão, qtd de itens)
 - Detalhamento por venda (mesa, comanda, hora, itens, taxa de serviço)
@@ -34,7 +39,25 @@ Extrai vendas via API, calcula comissões e gera relatório visual completo.
 
 ---
 
-## 🍺 2. Happy Hour Automático
+## 🚗 2. Relatório de Entregas
+
+Relatório dedicado para pedidos de delivery, com identificação de entregador e canal de origem.
+
+### Como usar:
+1. Abra a extensão → aba **ENTREGA** → configure período
+2. Clique **▶ INICIAR** — datas preenchidas automaticamente e navega no Saipos
+3. Clique **📄 RELATÓRIO** para abrir
+
+### Funcionalidades:
+- **Entregador**: buscado individualmente via API (nome aparece como chip no relatório)
+- **Canal**: badge iFood / 99food / Próprio
+- **Filtro de parceiros**: oculta pedidos de parceiros específicos
+- **Aba de filtros** no relatório com opções de exibição
+- **Auto-fill de datas**: preenche o formulário do Saipos automaticamente ao iniciar
+
+---
+
+## 🍺 3. Happy Hour Automático
 
 Troca o preço dos produtos automaticamente nos horários e dias configurados.
 
@@ -52,7 +75,7 @@ O preço altera automaticamente quando entra na janela de horário e volta ao no
 
 ---
 
-## 🧾 3. Resumo da Conta (Impressão)
+## 🧾 4. Resumo da Conta (Impressão)
 
 Botão **"Resumo"** injetado na tela de fechamento e edição de conta.
 
@@ -63,7 +86,11 @@ Botão **"Resumo"** injetado na tela de fechamento e edição de conta.
 - Calcula saldo restante
 - Gera arquivo `.saiposprt` com cabeçalho centralizado (loja, CNPJ, endereço)
 - Leitura de mesa/comanda com 4 camadas de fallback (Angular scope, DOM data-qa, texto visível, API REST)
-- Quantidade dos itens alinhada à direita com 2 espaços de separação
+
+### Configurações de impressão:
+- **Largura configurável**: 32 / 40 / 42 / 44 / 48 colunas (padrão: 42)
+- **Tamanho de fonte**: ajuste em px — fonte compacta (Font B) ativa automaticamente quando ≤ 9px
+- **Destaque visual**: Mesa, Comanda, Identificação e Falta a Pagar em negrito/tamanho ampliado
 
 ### Correções implementadas:
 - **Botão voltar corrigido**: retorna à tela de edição em vez da tela principal
@@ -71,14 +98,13 @@ Botão **"Resumo"** injetado na tela de fechamento e edição de conta.
 - **Couvert não some**: flag `paymentWasCompleted` detecta POST para endpoints de pagamento e evita o redirect incorreto após fechamento da conta
 - **Sem travamento ao finalizar conta**: chamadas assíncronas paralelizadas + timeouts reduzidos; fallback DOM usado apenas como último recurso
 - **Pagamentos realizados sempre exibidos**: cadeia de fallback scope → API → DOM garante exibição mesmo quando Angular scope não está disponível
-- **StoreId detectado automaticamente**: interceptor captura o ID da loja via XHR/fetch para clientes sem `/stores/` na URL
-- **Taxa de serviço de múltiplas fontes**: leitura da taxa de serviço de campos da venda, `$rootScope` e shifts ativos da loja
+- **StoreId detectado automaticamente**: interceptor captura o ID da loja via XHR/fetch e persiste no `localStorage` para garantia mesmo se o evento disparar antes do script carregar
 
 ![Resumo da Conta](images/resumo-conta.png)
 
 ---
 
-## 📋 4. Importar Produtos
+## 📋 5. Importar Produtos
 
 Na aba **IMPORTAR PROD.** do painel, cole dados em formato CSV para importação em lote de produtos.
 
@@ -95,7 +121,7 @@ Brigadeiro,3.50,Doces,Sabores variados,N,S
 
 ---
 
-## 📦 5. Gestão de Estoque
+## 📦 6. Gestão de Estoque
 
 Aba **ESTOQUE** protegida por senha para operações sensíveis no catálogo de produtos.
 
@@ -115,6 +141,7 @@ O painel possui sistema de bloqueio por senha para restringir o acesso a abas es
 - Ao bloquear a aba ativa, a extensão redireciona automaticamente para a primeira aba disponível
 - Senha padrão: `314159`
 - Configuração salva em `chrome.storage.local`
+- Padrão: somente **Comissões** e **Happy Hour** visíveis — demais abas bloqueadas
 
 ---
 
@@ -127,7 +154,8 @@ Saipos Tools/
 ├── images/            # Screenshots para documentação
 ├── pages/             # HTMLs de interface
 │   ├── popup.html
-│   └── report.html
+│   ├── report.html
+│   └── delivery-report.html
 └── src/
     ├── background.js  # Service worker
     ├── content/       # Scripts injetados no site
@@ -138,7 +166,8 @@ Saipos Tools/
     │   ├── popup.js
     │   └── report-page.js
     └── lib/           # Bibliotecas auxiliares
-        └── report.js
+        ├── report.js
+        └── delivery-report.js
 ```
 
 ---
@@ -159,4 +188,4 @@ Esta extensão é uma ferramenta **auxiliar independente**, desenvolvida para su
 
 ---
 
-_Saipos Tools v6.41.0 — Abril / 2026_
+_Saipos Tools v6.49.4 — Abril / 2026_

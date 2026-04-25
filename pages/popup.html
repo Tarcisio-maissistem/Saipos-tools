@@ -34,6 +34,14 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
       color:#ffffff;flex-shrink:0}
 .hdr-text h1{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:700;color:var(--acc)}
 .hdr-text p{color:var(--muted);font-size:10px;margin-top:1px}
+/* Badge nome da empresa */
+.store-badge{display:none;align-items:center;gap:4px;margin-top:3px;
+  background:rgba(0,163,255,.1);border:1px solid rgba(0,163,255,.25);
+  border-radius:4px;padding:2px 7px;width:fit-content}
+.store-badge.show{display:flex}
+.store-badge-dot{width:6px;height:6px;border-radius:50%;background:var(--acc);flex-shrink:0}
+.store-badge span{font-size:10px;font-weight:700;color:var(--acc);font-family:'IBM Plex Mono',monospace;
+  max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ─── URL check ─── */
 .url-warn{background:#fff8e1;border:1px solid var(--warn);border-radius:var(--r);
@@ -268,7 +276,12 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
   <div class="logo">O</div>
   <div class="hdr-text">
     <h1>Saipos Tools</h1>
-    <p>API Scraper · conta.saipos.com · <span id="app-version">v6.45.0</span></p>
+    <p>API Scraper · conta.saipos.com · <span id="app-version">v...</span></p>
+    <!-- Nome fantasia da empresa detectada na aba ativa -->
+    <div class="store-badge" id="store-badge">
+      <div class="store-badge-dot"></div>
+      <span id="store-name-label">—</span>
+    </div>
   </div>
   <button id="btnLockConfig" class="lock-config-btn" title="Configurações de Acesso">⚙️🔒</button>
 </div>
@@ -518,7 +531,15 @@ body{width:100%;height:100vh;background:var(--bg);color:var(--txt);
       <option value="40">40 colunas (80mm estreito)</option>
       <option value="42">42 colunas (80mm)</option>
       <option value="44">44 colunas (padrão SAIPOS)</option>
+      <!-- padrão do sistema é 42 -->
       <option value="48">48 colunas (80mm largo)</option>
+    </select>
+    <div class="lc-sec-title" style="margin-top:14px">Fonte da Impressão (itens/produtos)</div>
+    <select id="lcFontSize" style="width:100%;padding:7px 8px;border:1px solid var(--bord);border-radius:6px;font-size:12px;background:var(--s1);color:var(--txt);cursor:pointer;margin-bottom:4px">
+      <option value="8">8 — fonte pequena, sem espaço (Font B)</option>
+      <option value="9">9 — fonte pequena, sem espaço (Font B)</option>
+      <option value="10">10 — fonte normal, sem espaço entre itens ★ médio</option>
+      <option value="11">11 — fonte normal, com espaço (padrão SAIPOS)</option>
     </select>
     <div class="lc-sec-title" style="margin-top:14px">Alterar Senha</div>
     <input type="password" id="lcNewPwd" class="spt-pin" style="width:100%;letter-spacing:2px;font-size:14px;margin-bottom:4px"

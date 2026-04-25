@@ -102,6 +102,9 @@
           // Extrai e broadcast do storeId sempre que temos uma URL da API (qualquer endpoint)
           var storeIdXhrMatch = sp.url.match(/\/v1\/stores\/(\d+)/);
           if (storeIdXhrMatch) {
+            // Persiste em localStorage — garante disponibilidade mesmo após race condition
+            // (interceptor MAIN-world dispara antes do partial-payment.js carregar)
+            try { localStorage.setItem('spt_store_id', storeIdXhrMatch[1]); } catch(e) {}
             fire('__saipos_store_id_detected', { storeId: storeIdXhrMatch[1] });
           }
 
@@ -160,6 +163,7 @@
       // Extrai storeId da URL do fetch e broadcast imediato (antes da resposta)
       var storeIdFetchMatch = url.match(/\/v1\/stores\/(\d+)/);
       if (storeIdFetchMatch) {
+        try { localStorage.setItem('spt_store_id', storeIdFetchMatch[1]); } catch(e) {}
         fire('__saipos_store_id_detected', { storeId: storeIdFetchMatch[1] });
       }
 
@@ -480,7 +484,7 @@
             for (var j = 0; j < items.length; j++) {
               var it = items[j];
               result.sale_items.push({
-                nome: it.desc_item || it.desc_sale_item || it.name || '',
+                nome: it.desc_item || it.desc_sale_item || it.desc_store_item || it.name || it.product_name || '',
                 qtd: it.quantity || it.qty || 1,
                 valor_unit: it.sale_price || it.unit_price || it.price || 0,
                 valor_total: it.total_price || it.total || 0

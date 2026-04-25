@@ -14,7 +14,14 @@
   window.__saiposPartialPaymentActive = true;
 
   const STORE_CACHE_KEY = 'saipos_store_info_cache';
-  const SPT_VERSION = 'v6.43.2'; // versão exibida no rodapé do cupom impresso
+  const SPT_VERSION = (() => {
+    try {
+      const manifest = chrome.runtime && chrome.runtime.getManifest ? chrome.runtime.getManifest() : null;
+      return manifest && manifest.version ? ('v' + manifest.version) : 'v?';
+    } catch (_) {
+      return 'v?';
+    }
+  })(); // versão exibida no rodapé do cupom impresso
 
   // StoreId detectado pelo interceptor via XHR/fetch (fallback para clientes sem /stores/ na URL)
   let detectedStoreId = null;
@@ -86,6 +93,13 @@
   // ================================================================
 
   let uiInjected = false;
+
+  // Destino obrigatório após fechar mesa
+  const MAIN_MENU_HASH = '#/app/sale/table-order/new-main';
+
+  // Flag setado quando usuário clica em "Fechar Mesa"
+  let tableClosePending = false;
+  let tableCloseTimeout = null;
 
   // URL: #/app/sale/table-order/close/{saleId}
   function isCloseScreen() {
@@ -340,8 +354,14 @@
     // Tenta extrair do path: /stores/88111/...
     const m = window.location.href.match(/\/stores\/(\d+)/);
     if (m) return m[1];
-    // Fallback: ID detectado pelo interceptor via XHR/fetch (clientes sem /stores/ na URL)
+    // Fallback: ID detectado pelo interceptor em memória (evento pode ter chegado depois do load)
     if (detectedStoreId) return detectedStoreId;
+    // Fallback: localStorage — interceptor persiste o ID no momento que intercepta a 1ª chamada API,
+    // mesmo que o evento __saipos_store_id_detected tenha disparado antes deste script carregar
+    try {
+      const stored = localStorage.getItem('spt_store_id');
+      if (stored) { detectedStoreId = stored; return stored; }
+    } catch(e) {}
     // Fallback: extrai do nome da loja no DOM que pode conter [88111]
     const storeName = getStoreNameFromDOM();
     const idMatch = storeName.match(/\[(\d+)\]/);
@@ -677,15 +697,20 @@
     return Array.from(map.values());
   }
 
-  function buildPrintRows(data, storeInfo, cols) {
+  function buildPrintRows(data, storeInfo, cols, fontSize) {
     // v6.21.0 — layout idêntico ao SAIPOS nativo: prefixo </ae>, <a> nos itens
     // Qt(6) + Nome(?) + Unit(7) + Valor(8) = COLS total (configurável)
-    const COLS   = cols || 44; // largura configurável — padrão 44 (SAIPOS nativo)
-    const AE     = '</ae>';  // prefixo left-align (padrão SAIPOS nativo)
-    const QTY_W  = 6;        // mesmo que SAIPOS nativo
-    const UNIT_W = 7;        // coluna valor unitário (nosso acréscimo)
-    const VAL_W  = 8;        // coluna valor total
-    const NAME_W = COLS - QTY_W - UNIT_W - VAL_W; // 23 chars para nome
+    const COLS   = cols || 42;
+    const AE     = '</ae>';
+    // Três níveis de compactação (fontSize do printSettings ignorado pelo printer em layout custom):
+    //   11 = <a> + linha vazia entre itens   → original SAIPOS nativo
+    //   10 = <a> + sem linha vazia            → médio: mesma fonte, espaçamento reduzido
+    //  ≤9  = <c> + sem linha vazia            → compacto total: Font B (menor)
+    const ITEM_TAG = (fontSize && fontSize <= 9) ? 'c' : 'a';
+    const QTY_W  = 6;
+    const UNIT_W = 7;
+    const VAL_W  = 8;
+    const NAME_W = COLS - QTY_W - UNIT_W - VAL_W;
     const rows = [];
 
     rows.push('<barra_mostrar>0</barra_mostrar>');
@@ -713,11 +738,14 @@
     if (data.garcom) rows.push(AE + 'Gar\u00E7om: ' + data.garcom);
 
     rows.push('</linha_simples>');
-    // Cabeçalho: Qt. alinhado à direita + 2 espaços separadores
-    rows.push(AE + padL('Qt.', QTY_W - 2) + '  ' + padR('Descri\u00E7\u00E3o', NAME_W) + padL('Unit', UNIT_W) + padL('Valor', VAL_W));
+
+    // Cabecalho usa mesmo tag que itens — alinhamento de colunas depende de fonte identica
+    const hdrLine = padL('Qt.', QTY_W - 2) + '  ' + padR('Descrição', NAME_W) + padL('Unit', UNIT_W) + padL('Valor', VAL_W);
+    rows.push(AE + '<' + ITEM_TAG + '>' + hdrLine + '</' + ITEM_TAG + '>');
     rows.push('</linha_simples>');
 
-    // Itens — </ae><a>...</a> igual SAIPOS nativo + linha vazia </ae> após cada item
+    // Sem linha vazia entre itens quando fontSize < 11 (nível médio e compacto)
+    const compact = fontSize && fontSize < 11;
     let hasHHItems = false;
     if (data.items && data.items.length > 0) {
       const grouped = groupItemsByName(data.items);
@@ -725,19 +753,18 @@
         const qtdStr  = item.qtd % 1 === 0 ? String(Math.round(item.qtd)) : item.qtd.toFixed(3);
         const valorStr = formatDot(item.valor);
         const unitStr  = item.valorUnit > 0 ? formatDot(item.valorUnit).replace('.', ',') : '';
-        // Qty: right-align em (QTY_W-2) chars + 2 espaços separadores antes do nome
         const qtdPad  = padL(qtdStr, QTY_W - 2) + '  ';
         const nomeRaw = item.hhTag
-          ? item.nome.substring(0, NAME_W - 2) + ' *'  // reserva 2 chars para ' *'
+          ? item.nome.substring(0, NAME_W - 2) + ' *'
           : item.nome.substring(0, NAME_W);
         const nomePad = padR(nomeRaw, NAME_W);
         const unitPad = padL(unitStr, UNIT_W);
         const valPad  = padL(valorStr, VAL_W);
         if (item.hhTag) hasHHItems = true;
-        rows.push(AE + '<a>' + qtdPad + nomePad + unitPad + valPad + '</a>');
-        rows.push(AE); // linha vazia após cada item (igual SAIPOS nativo)
+        rows.push(AE + '<' + ITEM_TAG + '>' + qtdPad + nomePad + unitPad + valPad + '</' + ITEM_TAG + '>');
+        if (!compact) rows.push(AE);
       });
-      if (hasHHItems) rows.push(AE + '* Pre\u00E7o Happy Hour aplicado');
+      if (hasHHItems) rows.push(AE + '* Preço Happy Hour aplicado');
     }
 
     rows.push('</linha_simples>');
@@ -796,19 +823,20 @@
     return rows;
   }
 
-  function buildSaiposprtJSON(data, storeInfo, cols) {
+  function buildSaiposprtJSON(data, storeInfo, cols, fontSize) {
     // Use o saleId como fileName (igual ao SAIPOS nativo)
     const saleId = data.saleId || String(Date.now());
     const fileName = saleId + '.saiposprt';
     const idUser = data._idUser || 0;
-    const COLS = cols || 44; // repassa para printSettings.rowColumns
-    const printRows = buildPrintRows(data, storeInfo, COLS);
+    const COLS  = cols    || 42;
+    const FSIZE = fontSize || 11;
+    const printRows = buildPrintRows(data, storeInfo, COLS, FSIZE);
 
     const doc = [{
       printSettings: {
         type: 0, printDelivery: 1, printTable: 1, printServiceTicket: 1,
         layout: 2, rowColumns: COLS, copies: 1, emptyLines: 3, emptyChar: ' ',
-        fontSize: 11, cashierPrintZeroedValueItems: 1, printTableCancelItem: 0, // fontSize 11 (igual SAIPOS nativo)
+        fontSize: FSIZE, cashierPrintZeroedValueItems: 1, printTableCancelItem: 0,
         groupItemsQuantity: 0, printEscposModel: 2, showPaymentDetailPrintingAndApp: 0,
         escpos: true, idStore: parseInt(storeInfo.idStore) || 0, printPath: '',
         guid: uuid(), id_user: idUser, fileName
@@ -828,26 +856,46 @@
   }
 
   async function downloadSaiposprt(data, storeInfo) {
-    // Lê largura configurada no painel — padrão 44 (SAIPOS nativo)
-    let printerCols = 44;
+    let printerCols = 42;
+    let printFontSize = 11;
     try {
-      const c = await chrome.storage.local.get('saipos_printer_cols');
-      if (c.saipos_printer_cols) printerCols = parseInt(c.saipos_printer_cols) || 44;
+      const c = await chrome.storage.local.get(['saipos_printer_cols', 'saipos_font_size']);
+      if (c.saipos_printer_cols) printerCols   = parseInt(c.saipos_printer_cols) || 42;
+      if (c.saipos_font_size)    printFontSize  = parseInt(c.saipos_font_size)    || 11;
     } catch (e) {}
-    const { json, fileName } = buildSaiposprtJSON(data, storeInfo, printerCols);
+    const { json, fileName } = buildSaiposprtJSON(data, storeInfo, printerCols, printFontSize);
     const jsonStr = JSON.stringify(json);
     // btoa() codifica como Latin-1 (1 byte por char) — compatível com SAIPOS Printer
     const base64 = btoa(jsonStr);
 
     // Download via background.js usando chrome.downloads API
+    // Verifica contexto antes — extensão pode ter sido recarregada com página já aberta
+    if (!chrome.runtime?.id) {
+      alert('Extensão foi atualizada. Recarregue a página (F5) e tente novamente.');
+      return;
+    }
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({
-        type: 'DOWNLOAD_SAIPOSPRT',
-        data: base64,
-        fileName
-      }, (response) => {
+      try {
+        chrome.runtime.sendMessage({
+          type: 'DOWNLOAD_SAIPOSPRT',
+          data: base64,
+          fileName
+        }, () => {
+          if (chrome.runtime.lastError) {
+            // Contexto invalidado após envio — orienta usuário
+            if (chrome.runtime.lastError.message?.includes('context invalidated') ||
+                chrome.runtime.lastError.message?.includes('Extension context')) {
+              alert('Extensão foi atualizada. Recarregue a página (F5) e tente novamente.');
+            }
+          }
+          resolve();
+        });
+      } catch (e) {
+        if (e.message?.includes('context invalidated') || e.message?.includes('Extension context')) {
+          alert('Extensão foi atualizada. Recarregue a página (F5) e tente novamente.');
+        }
         resolve();
-      });
+      }
     });
   }
 
@@ -1100,6 +1148,7 @@
     btnCol.className = 'col-md-12 p-0';
     btnCol.appendChild(btn);
     btnRow.appendChild(btnCol);
+    if (!parentContainer.parentNode) return false; // guarda contra elemento sem pai
     parentContainer.parentNode.insertBefore(btnRow, parentContainer.nextSibling);
     return true;
   }
@@ -1241,8 +1290,13 @@
     btnPrint.addEventListener('click', async () => {
       btnPrint.disabled = true;
       btnPrint.innerHTML = '<i class="zmdi zmdi-spinner zmdi-hc-spin"></i> Enviando...';
-      await downloadSaiposprt(data, storeInfo);
-      btnPrint.innerHTML = '<i class="zmdi zmdi-check"></i> Enviado!';
+      try {
+        await downloadSaiposprt(data, storeInfo);
+        btnPrint.innerHTML = '<i class="zmdi zmdi-check"></i> Enviado!';
+      } catch (e) {
+        // Exibe erro no botão em vez de travar em "Enviando..." para sempre
+        btnPrint.innerHTML = '<i class="zmdi zmdi-alert-circle"></i> Erro ao enviar';
+      }
       setTimeout(() => {
         btnPrint.disabled = false;
         btnPrint.innerHTML = '<i class="zmdi zmdi-print"></i> Imprimir';
@@ -1305,40 +1359,50 @@
 
     const totalItens = items.reduce((s, i) => s + i.valor, 0); // recalcula após HH
 
-    // Recalcula taxa de serviço — prioridade: DOM percentual > DOM valor > scope > diferença total
-    let taxaServico = totais.taxaServico;
+    // Recalcula taxa de serviço — prioridade: percentual × totalItens > diferença scope > DOM direto
+    // DOM service-value pode estar FRACIONADO quando há pgto parcial registrado (bug reportado v6.48.4):
+    // Saipos exibe taxa proporcional ao que resta, não ao total — não usar como fonte primária.
     let pctServico = totais.pctServico;
+    let taxaServico = 0; // começa zerado — não usa DOM direto para evitar valor fracionado
 
-    // 1) DOM tem percentual → recalcula para evitar valor fracionado
-    if (pctServico) {
-      const pctMatch = pctServico.match(/([\d,]+)\s*%/);
-      if (pctMatch) {
-        const pct = parseFloat(pctMatch[1].replace(',', '.'));
-        taxaServico = Math.round(totalItens * (pct / 100) * 100) / 100;
-      }
+    // Função auxiliar: aplica percentual sobre totalItens
+    function calcByPct(pctStr) {
+      const m = (pctStr || '').match(/([\d,]+)\s*%/);
+      if (!m) return 0;
+      const pct = parseFloat(m[1].replace(',', '.'));
+      return pct > 0 ? Math.round(totalItens * (pct / 100) * 100) / 100 : 0;
     }
 
-    // 2) Fallback: scope Angular capturado pelo interceptor
+    // 1) DOM tem percentual → fonte mais confiável
+    if (pctServico) taxaServico = calcByPct(pctServico);
+
+    // 2) Scope Angular — percentual primeiro, valor como backup
+    if (!pctServico && saleData && saleData.pct_servico) {
+      pctServico = saleData.pct_servico;
+      taxaServico = calcByPct(pctServico);
+    }
     if (!taxaServico && saleData && saleData.taxa_servico > 0) {
       taxaServico = saleData.taxa_servico;
     }
-    if (!pctServico && saleData && saleData.pct_servico) {
-      pctServico = saleData.pct_servico;
-      // Recalcula taxaServico a partir do percentual para evitar valor fracionado por pgto parcial
-      if (!taxaServico) {
-        const m = pctServico.match(/([\d,]+)\s*%/);
-        if (m) taxaServico = Math.round(totalItens * (parseFloat(m[1].replace(',', '.')) / 100) * 100) / 100;
-      }
-    }
 
-    // 3) Fallback: total_final do scope (campo separado que inclui taxa) − totalItens
-    if (!taxaServico && saleData && saleData.total_final > 0 && saleData.total_final > totalItens + 0.01) {
+    // 3) Diferença via scope total_final (campo que inclui taxa de serviço)
+    if (!taxaServico && saleData && saleData.total_final > totalItens + 0.01) {
       taxaServico = Math.round((saleData.total_final - totalItens) * 100) / 100;
     }
 
-    // 4) Fallback: total base do scope − totalItens (quando total_price inclui taxa)
-    if (!taxaServico && saleData && saleData.total > 0 && saleData.total > totalItens + 0.01) {
+    // 4) Diferença via total base do scope
+    if (!taxaServico && saleData && saleData.total > totalItens + 0.01) {
       taxaServico = Math.round((saleData.total - totalItens) * 100) / 100;
+    }
+
+    // 5) Último recurso: DOM direto — só usa se consistente com totalItens (não fracionado)
+    if (!taxaServico && totais.taxaServico > 0) {
+      // Sanity check: DOM value próximo ao esperado (±20% de tolerância para variações legítimas)
+      const domPct = totalItens > 0 ? (totais.taxaServico / totalItens) * 100 : 0;
+      if (domPct > 0 && domPct <= 25) {
+        taxaServico = totais.taxaServico;
+        if (!pctServico) pctServico = domPct.toFixed(0) + '%';
+      }
     }
 
     const totalGeral = Math.round((totalItens + taxaServico) * 100) / 100;
@@ -1553,6 +1617,8 @@
 
     if (isCloseScreen()) {
       // --- Tela de pagamento: injeta Resumo + sobrepõe impressão ---
+      // Se ainda está na close screen, o fechar mesa falhou — cancela flag
+      if (tableClosePending) { tableClosePending = false; if (tableCloseTimeout) clearTimeout(tableCloseTimeout); }
       lastCloseSaleId = getSaleIdFromUrl();
       paymentWasCompleted = false; // reseta a cada abertura da tela de pagamento
       checkTimeout = setTimeout(() => {
@@ -1577,9 +1643,25 @@
     } else if (isAnyOrderScreen()) {
       // v6.19.0 — qualquer tela de comanda (edit, view, etc.): só sobrepõe impressão
 
+      // Após Fechar Mesa (tableClosePending): consome flag e garante destino correto
+      if (tableClosePending) {
+        tableClosePending = false;
+        if (tableCloseTimeout) clearTimeout(tableCloseTimeout);
+        lastCloseSaleId = null; // evita "Voltar" interceptar navegação pós-fechamento
+        paymentWasCompleted = false;
+        if (!hash.includes('new-main')) {
+          // vm.closeTable() navegou para lugar errado — força menu principal
+          window.location.hash = MAIN_MENU_HASH;
+          return;
+        }
+        // Já está em new-main — sem redirect, continua normalmente
+      }
+
       // v6.31.0 — Fix botão Voltar: redireciona SOMENTE se pagamento NÃO foi confirmado
-      // (evita redirect quando SAIPOS navega após fechar conta com sucesso)
-      if (lastCloseSaleId && !paymentWasCompleted && !hash.includes('table-order/edit/' + lastCloseSaleId)) {
+      // NÃO dispara quando destino é new-main (= usuário acabou de fechar mesa com sucesso)
+      if (lastCloseSaleId && !paymentWasCompleted &&
+          !hash.includes('table-order/edit/' + lastCloseSaleId) &&
+          !hash.includes('new-main')) {
         const saleId = lastCloseSaleId;
         lastCloseSaleId = null;
         console.log('[SPT] Voltar interceptado (table-order), redirecionando para edit/' + saleId);
@@ -1608,6 +1690,16 @@
       // --- Outras telas: limpa tudo ---
       retryCount = 0;
       removeUI();
+
+      // Após Fechar Mesa: caiu em tela fora de table-order → redireciona para menu principal
+      if (tableClosePending) {
+        tableClosePending = false;
+        if (tableCloseTimeout) clearTimeout(tableCloseTimeout);
+        lastCloseSaleId = null;
+        paymentWasCompleted = false;
+        window.location.hash = MAIN_MENU_HASH;
+        return;
+      }
 
       // v6.6.0 — Fix: redireciona SOMENTE se o pagamento não foi confirmado
       // (ex: usuário clicou Voltar sem fechar a conta)
@@ -1681,21 +1773,26 @@
       }
 
       // ── Itens: scope → API ──
+      // Tenta múltiplos aliases de campo — APIs do Saipos variam por versão
       let items = (raw.sale_items || []).map(it => ({
-        nome:      it.nome,
-        qtd:       it.qtd,
-        valorUnit: it.valor_unit,
-        valor:     it.valor_total || Math.round(it.qtd * it.valor_unit * 100) / 100
-      })).filter(i => i.nome);
+        nome:      it.nome || it.desc_item || it.desc_sale_item || it.desc_store_item || it.name || it.product_name || '[Produto]',
+        qtd:       it.qtd  || it.quantity  || it.qty || 1,
+        valorUnit: it.valor_unit || it.sale_price || it.unit_price || it.price || 0,
+        valor:     it.valor_total || it.total_price || it.total || Math.round((it.qtd || 1) * (it.valor_unit || 0) * 100) / 100
+      })).filter(i => i.qtd > 0 || i.valor > 0);
 
-      if (items.length === 0 && apiSale) {
+      // Considera itens do scope inválidos quando todos são placeholder sem valor real
+      // (o scope do card só carrega resumo — itens completos só vêm pela API)
+      const scopeItemsValid = items.length > 0 && items.some(i => i.nome !== '[Produto]' && i.valor > 0);
+      if (!scopeItemsValid && apiSale) {
         const rawItems = apiSale.sale_items || apiSale.items || [];
-        items = rawItems.map(it => ({
-          nome:      it.desc_item || it.desc_sale_item || it.name || '',
+        const apiItems = rawItems.map(it => ({
+          nome:      it.desc_item || it.desc_sale_item || it.desc_store_item || it.name || it.product_name || '[Produto]',
           qtd:       it.quantity  || it.qty || 1,
           valorUnit: it.sale_price || it.unit_price || it.price || 0,
           valor:     it.total_price || it.total || 0
-        })).filter(i => i.nome);
+        })).filter(i => i.qtd > 0 || i.valor > 0);
+        if (apiItems.length > 0) items = apiItems;
       }
 
       // ── Pagamentos: scope → API ──
@@ -1748,7 +1845,7 @@
       items = applyHHRule(items, hhPromos);
       const totalItens = items.reduce((s, i) => s + i.valor, 0);
 
-      // ── Taxa de serviço: scope → API campos diretos → shift aninhado → diferença ──
+      // ── Taxa de serviço: scope → table_order direto → API campos → shift → diferença ──
       let taxaServico = raw.taxa_servico || 0;
       let pctServico  = raw.pct_servico  || '';
 
@@ -1757,18 +1854,28 @@
         if (m) taxaServico = Math.round(totalItens * (parseFloat(m[1].replace(',', '.')) / 100) * 100) / 100;
       }
       if (!taxaServico && apiSale) {
-        taxaServico = apiSale.service_fee      || apiSale.service_fee_value ||
-                      apiSale.service_tax      || apiSale.service_tax_value ||
-                      apiSale.fee_service      || apiSale.taxa_servico      || 0;
+        // 1ª fonte: table_order.total_service_charge_amount — valor exato já calculado pela API
+        const apiTO = apiSale.table_order || {};
+        if (apiTO.total_service_charge_amount > 0) {
+          taxaServico = apiTO.total_service_charge_amount;
+          if (!pctServico && apiTO.service_charge > 0) pctServico = apiTO.service_charge.toFixed(0) + '%';
+        }
+
+        // 2ª fonte: campos diretos na venda
+        if (!taxaServico) {
+          taxaServico = apiSale.service_fee      || apiSale.service_fee_value ||
+                        apiSale.service_tax      || apiSale.service_tax_value ||
+                        apiSale.fee_service      || apiSale.taxa_servico      || 0;
+        }
         if (!pctServico) {
           const pct = apiSale.service_rate || apiSale.service_percentage;
           if (pct) {
             const pctNum = pct <= 1 ? pct * 100 : pct;
             pctServico   = pctNum.toFixed(0) + '%';
-            taxaServico  = Math.round(totalItens * (pctNum / 100) * 100) / 100;
+            if (!taxaServico) taxaServico = Math.round(totalItens * (pctNum / 100) * 100) / 100;
           }
         }
-        // shift aninhado na venda (fonte mais confiável — config do estabelecimento)
+        // 3ª fonte: shift aninhado (fonte mais confiável para %)
         if (!taxaServico) {
           const apiShift = apiSale.shift || {};
           if (apiShift.use_service_charge === 'Y' && apiShift.service_charge > 0) {
@@ -1777,7 +1884,7 @@
             taxaServico  = Math.round(totalItens * (pctNum / 100) * 100) / 100;
           }
         }
-        // store.shifts aninhado na venda (mesmo dado, path alternativo)
+        // 4ª fonte: store.shifts
         if (!taxaServico && apiSale.store && Array.isArray(apiSale.store.shifts)) {
           const activeShift = apiSale.store.shifts.find(s => s.use_service_charge === 'Y' && s.service_charge > 0);
           if (activeShift) {
@@ -1786,7 +1893,8 @@
           }
         }
       }
-      if (!taxaServico && totalRef > totalItens + 0.01) {
+      // Fallback diferença: só aplica quando totalItens > 0 para evitar tratar itens como taxa
+      if (!taxaServico && totalItens > 0 && totalRef > totalItens + 0.01) {
         taxaServico = Math.round((totalRef - totalItens) * 100) / 100;
       }
 
@@ -1838,28 +1946,71 @@
   });
 
   function init() {
-
-    window.addEventListener('hashchange', () => handleRouteChange());
-    handleRouteChange();
-
-    // MutationObserver como backup (SPA pode mudar DOM sem hashchange)
+    // ── MutationObserver controlado ───────────────────────────────
+    // Ativo SOMENTE na tela de fechamento — evita overhead em todo o SPA.
+    // Quando fora da close screen, apenas polling leve (500ms) roda.
     let mutationTimer = null;
-    const observer = new MutationObserver(() => {
-      if (mutationTimer) return;
-      mutationTimer = setTimeout(() => {
-        mutationTimer = null;
-        if (isCloseScreen() && !uiInjected) {
-          handleRouteChange();
-        } else if (isAnyOrderScreen()) {
-          // Re-aplica override se Angular re-renderizou o botão de impressão
+    let observer = null;
+
+    function startObserver() {
+      if (observer) return; // já ativo
+      observer = new MutationObserver(() => {
+        if (mutationTimer) return;
+        mutationTimer = setTimeout(() => {
+          mutationTimer = null;
+          if (!uiInjected && isCloseScreen()) handleRouteChange();
+          else if (!isCloseScreen()) stopObserver();
+        }, 300);
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    function stopObserver() {
+      if (!observer) return;
+      observer.disconnect();
+      observer = null;
+      if (mutationTimer) { clearTimeout(mutationTimer); mutationTimer = null; }
+    }
+
+    // ── Roteamento ────────────────────────────────────────────────
+    function onRouteChange() {
+      handleRouteChange();
+      if (isCloseScreen()) startObserver(); // liga observer só na close screen
+      else stopObserver();                  // desliga fora dela
+    }
+
+    // Intercepta clique em "Fechar Mesa" — define flag para redirecionar após navegação
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-qa="btn-close-table"], #close-table');
+      if (!btn) return;
+      tableClosePending = true;
+      // Segurança: limpa flag após 6s se API falhar ou usuário cancelar
+      if (tableCloseTimeout) clearTimeout(tableCloseTimeout);
+      tableCloseTimeout = setTimeout(() => { tableClosePending = false; }, 6000);
+    }, false); // bubble — após Angular executar vm.closeTable()
+
+    window.addEventListener('hashchange', onRouteChange);
+    onRouteChange(); // executa na abertura
+
+    // ── Polling leve (500ms) ──────────────────────────────────────
+    // Cobre: pushState sem hashchange, re-render do botão de impressão, limpeza de UI
+    let lastHref = location.href;
+    setInterval(() => {
+      if (location.href !== lastHref) {
+        lastHref = location.href;
+        onRouteChange();
+        return;
+      }
+      // Fora da close screen: verifica botão de impressão e limpeza de UI
+      if (!isCloseScreen()) {
+        if (isAnyOrderScreen()) {
           const btn = document.querySelector('[data-qa="options-print"]');
           if (btn && !btn.__sptPrintOverridden) overrideNativePrintButton();
         } else if (uiInjected) {
           removeUI();
         }
-      }, 300);
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+      }
+    }, 500);
   }
 
   if (document.readyState === 'loading') {

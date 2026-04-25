@@ -810,6 +810,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   const vSpan = document.getElementById('app-version');
   if (vSpan && manifest && manifest.version) vSpan.textContent = 'v' + manifest.version;
 
+  // Busca e exibe nome fantasia da empresa na aba ativa do Saipos
+  try {
+    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (activeTab && activeTab.url && activeTab.url.includes('conta.saipos.com')) {
+      const storeRes = await chrome.scripting.executeScript({
+        target: { tabId: activeTab.id },
+        func: () => {
+          const span = document.querySelector('span.tm-label[uib-tooltip]');
+          if (!span) return null;
+          return span.getAttribute('uib-tooltip') || span.textContent.trim() || null;
+        }
+      });
+      const nome = storeRes && storeRes[0] && storeRes[0].result;
+      if (nome) {
+        const badge = document.getElementById('store-badge');
+        const label = document.getElementById('store-name-label');
+        if (badge && label) {
+          label.textContent = nome;
+          badge.classList.add('show'); // torna badge visível
+        }
+      }
+    }
+  } catch (_) {} // aba pode não ser Saipos — ignorar silenciosamente
+
   // Inicializa inputs de data com hoje como padrão
   const todayISO = new Date().toISOString().slice(0, 10);
   if ($('pDateFrom') && !$('pDateFrom').value) $('pDateFrom').value = todayISO;
@@ -1080,10 +1104,13 @@ function stockLogMsg(text) {
 
 const LOCK_KEY = 'saipos_tabs_lock';
 const PRINTER_COLS_KEY = 'saipos_printer_cols';
-let currentPrinterCols = 44; // largura da impressora em colunas (padrão SAIPOS)
+const FONT_SIZE_KEY = 'saipos_font_size';
+let currentPrinterCols = 42; // padrão: 42 colunas (80mm)
+let currentFontSize = 12;    // tamanho de fonte padrão em px
 const LOCK_DEFAULTS = {
   password: '314159',
-  locked: { log: false, csv: true, estoque: true, resumo: false, happyhour: false, entrega: false } // log habilitado por padrão
+  // Padrão: somente Comissões e Happy Hour visíveis — resto bloqueado
+  locked: { log: true, csv: true, estoque: true, resumo: false, happyhour: false, entrega: true }
 };
 
 let _lockCallback = null; // callback após senha correta
@@ -1102,15 +1129,46 @@ function applyLockStyles() {
 
 async function loadLockConfig() {
   try {
-    const data = await chrome.storage.local.get([LOCK_KEY, PRINTER_COLS_KEY]);
+    const data = await chrome.storage.local.get([LOCK_KEY, PRINTER_COLS_KEY, FONT_SIZE_KEY]);
     if (data[LOCK_KEY]) {
-      // Mescla com defaults para garantir campos novos
       lockConfig.password = data[LOCK_KEY].password || LOCK_DEFAULTS.password;
       lockConfig.locked   = Object.assign({}, LOCK_DEFAULTS.locked, data[LOCK_KEY].locked || {});
     }
-    if (data[PRINTER_COLS_KEY]) currentPrinterCols = parseInt(data[PRINTER_COLS_KEY]) || 44;
+    if (data[PRINTER_COLS_KEY]) currentPrinterCols = parseInt(data[PRINTER_COLS_KEY]) || 42;
+    if (data[FONT_SIZE_KEY])    currentFontSize    = parseInt(data[FONT_SIZE_KEY])    || 12;
+    applyFontSize();
   } catch (e) {}
   applyLockStyles();
+}
+
+function applyFontSize() {
+  // body.style.fontSize não cascateia sobre filhos com px explícito no CSS.
+  // Injeta <style> dinâmico que sobrescreve cada seletor de painel proporcionalmente.
+  let styleEl = document.getElementById('spt-font-override');
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'spt-font-override';
+    document.head.appendChild(styleEl);
+  }
+  const fs = currentFontSize; // px base escolhido pelo admin
+  styleEl.textContent = `
+    /* Painéis de conteúdo — escala proporcional ao tamanho escolhido */
+    .gc-name          { font-size: ${fs + 1}px !important; }
+    .gc-stat span     { font-size: ${Math.max(7, fs - 2)}px !important; }
+    .gc-stat b        { font-size: ${fs}px !important; }
+    .log-line         { font-size: ${fs}px !important; }
+    .alert-tbl td,
+    .alert-tbl th     { font-size: ${Math.max(7, fs - 2)}px !important; }
+    .sec-label        { font-size: ${Math.max(7, fs - 2)}px !important; }
+    .hh-name          { font-size: ${fs}px !important; }
+    .hh-details       { font-size: ${Math.max(7, fs - 2)}px !important; }
+    .hh-price         { font-size: ${fs}px !important; }
+    #progLabel,
+    #statusLabel,
+    #pctBadge         { font-size: ${Math.max(8, fs - 2)}px !important; }
+    .badge            { font-size: ${Math.max(7, fs - 2)}px !important; }
+    .empty            { font-size: ${fs}px !important; }
+  `;
 }
 
 async function saveLockConfig() {
@@ -1171,33 +1229,38 @@ function openLockConfig() {
   });
   $('lcNewPwd').value = '';
   $('lcSaveMsg').style.display = 'none';
-  // Sincroniza select com valor atual
   const colsSel = $('lcPrinterCols');
   if (colsSel) colsSel.value = String(currentPrinterCols);
+  const fsSel = $('lcFontSize');
+  if (fsSel) fsSel.value = String(currentFontSize);
   $('lockConfigOverlay').classList.add('show');
 }
 
 $('lcSave').addEventListener('click', async () => {
-  // Lê estado dos toggles
+  // Toggles de guias
   document.querySelectorAll('#lcTabToggles input[data-tab-key]').forEach(inp => {
     lockConfig.locked[inp.dataset.tabKey] = inp.checked;
   });
-  // Salva largura da impressora
+  // Largura da impressora
   const colsSel = $('lcPrinterCols');
   if (colsSel) {
-    currentPrinterCols = parseInt(colsSel.value) || 44;
+    currentPrinterCols = parseInt(colsSel.value) || 42;
     await chrome.storage.local.set({ [PRINTER_COLS_KEY]: currentPrinterCols });
   }
-  // Altera senha se preenchida
+  // Tamanho de fonte
+  const fsSel = $('lcFontSize');
+  if (fsSel) {
+    currentFontSize = parseInt(fsSel.value) || 12;
+    await chrome.storage.local.set({ [FONT_SIZE_KEY]: currentFontSize });
+    applyFontSize();
+  }
+  // Senha
   const newPwd = $('lcNewPwd').value.trim();
   if (newPwd) lockConfig.password = newPwd;
   await saveLockConfig();
-  $('lcSaveMsg').style.display = 'block';
-  setTimeout(() => {
-    $('lcSaveMsg').style.display = 'none';
-    $('lockConfigOverlay').classList.remove('show'); // fecha o overlay
-    switchToTab('resumo'); // volta para tela principal
-  }, 1500);
+  // Fecha imediatamente após salvar
+  $('lockConfigOverlay').classList.remove('show');
+  switchToTab('resumo');
 });
 
 $('lcClose').addEventListener('click', () => {

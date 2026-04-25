@@ -1250,6 +1250,14 @@
   }
   // ── Happy Hour Routine ──────────────────────────────────────
   let _hhTimer = null;
+  let _hhPromosCache = null; // cache em memória — evita storage.get a cada 30s
+
+  // Atualiza cache quando usuário salva promos no popup
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.saipos_happyhour) {
+      _hhPromosCache = changes.saipos_happyhour.newValue || [];
+    }
+  });
 
   async function checkHappyHour() {
     try {
@@ -1257,8 +1265,12 @@
          if (window.__saiposHHInterval) clearInterval(window.__saiposHHInterval);
          return;
       }
-      const res = await chrome.storage.local.get('saipos_happyhour');
-      const promos = res.saipos_happyhour || [];
+      // Usa cache; só lê storage na primeira execução
+      if (_hhPromosCache === null) {
+        const res = await chrome.storage.local.get('saipos_happyhour');
+        _hhPromosCache = res.saipos_happyhour || [];
+      }
+      const promos = _hhPromosCache;
       if (promos.length === 0) return;
 
       const now = new Date();
@@ -1289,6 +1301,7 @@
       }
 
       if (changed) {
+        // Persiste lastApplied atualizado; storage.onChanged vai sincronizar o cache
         await chrome.storage.local.set({ saipos_happyhour: promos });
       }
     } catch (err) {
