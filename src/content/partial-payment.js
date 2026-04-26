@@ -166,11 +166,20 @@
       if (ngCmd) comandaText = ngCmd.textContent.trim();
     }
 
+    // Tempo de permanência: <strong data-qa="to-now-time"> Tempo:</strong> 1d 23h6m
+    let tempo = '';
+    const tempoEl = document.querySelector('[data-qa="to-now-time"]');
+    if (tempoEl && tempoEl.parentElement) {
+      const tempoTxt = tempoEl.parentElement.textContent || '';
+      tempo = tempoTxt.replace(/Tempo:\s*/i, '').trim();
+    }
+
     return {
       comanda: comandaText,
       mesa: mesaText,
       garcom,
-      identificacao: ident ? ident.value.trim() : ''
+      identificacao: ident ? ident.value.trim() : '',
+      tempo
     };
   }
 
@@ -736,6 +745,7 @@
     if (data.identificacao) rows.push(AE + 'Identifica\u00E7\u00E3o: ' + data.identificacao);
     rows.push(AE + '<n><e>Mesa: ' + data.mesa + ' - Comanda: ' + data.comanda + '</e></n>');
     if (data.garcom) rows.push(AE + 'Gar\u00E7om: ' + data.garcom);
+    if (data.tempo) rows.push(AE + 'Tempo: ' + data.tempo);
 
     rows.push('</linha_simples>');
 
@@ -1162,6 +1172,7 @@
     html += '<div class="spt-info-row"><span>Comanda</span><strong>' + (data.comanda || '-') + '</strong></div>';
     if (data.garcom) html += '<div class="spt-info-row"><span>Garçom</span><strong>' + data.garcom + '</strong></div>';
     if (data.identificacao) html += '<div class="spt-info-row"><span>Identificação</span><strong>' + data.identificacao + '</strong></div>';
+    if (data.tempo) html += '<div class="spt-info-row"><span>Tempo</span><strong>' + data.tempo + '</strong></div>';
     html += '<div class="spt-info-row"><span>Data/Hora</span><strong>' + formatDateShort(new Date()) + '</strong></div>';
 
     // Separador
@@ -1419,6 +1430,7 @@
       comanda: (saleData && saleData.comanda) || mesaInfo.comanda,
       garcom: (saleData && saleData.garcom) || mesaInfo.garcom,
       identificacao: (saleData && saleData.identificacao) || mesaInfo.identificacao,
+      tempo: mesaInfo.tempo || '',
       items,
       totalGeral,   // totalItens + taxaServico (inclui os 10%)
       totalItens,   // soma dos itens apenas
