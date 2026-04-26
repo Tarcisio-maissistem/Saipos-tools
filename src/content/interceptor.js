@@ -279,6 +279,11 @@
                            sale.total_final   || sale.valor_total       ||
                            sale.total_amount  || 0;
 
+        // items_filtered=true: itens vieram de filterItems() — scope total ≠ totalItens filtrado,
+        // então diferença (total - totalItens) = valor dos removidos, NÃO taxa de serviço.
+        // collectSaleData deve pular steps de diferença quando este flag está ativo.
+        var useFilterItems = typeof vm.filterItems === 'function';
+
         var result = {
           id_sale: sale.id_sale || sale.id,
           sale_items: [],
@@ -286,17 +291,18 @@
           comanda: sale.command_order || sale.id_command_order || sale.comanda || String(sale.command_number || ''),
           garcom: sale.waiter_name || sale.desc_waiter || sale.garcom || '',
           identificacao: sale.desc_sale || '',
-          total:       sale.total_price || sale.total || 0, // total sem taxa (base)
-          total_final: totalComTaxa,                         // total com taxa, se disponível
+          total:         useFilterItems ? 0 : (sale.total_price || sale.total || 0), // 0 quando filtrado: evita diff errada
+          total_final:   useFilterItems ? 0 : totalComTaxa,                          // idem
           taxa_servico: taxaVal,
           pct_servico:  pctStr,
+          items_filtered: useFilterItems, // sinaliza que totais do scope não são comparáveis
           payments: []
         };
 
         // Itens — usa filterItems() para excluir removidos e incluir pendentes (não enviados)
         // filterItems(true) = enviados, filterItems(false) = pendentes, _storeItemDeleted = removido
         var items;
-        if (typeof vm.filterItems === 'function') {
+        if (useFilterItems) {
           var sentItems    = vm.filterItems(true)  || [];
           var pendingItems = vm.filterItems(false) || [];
           var activeSent   = sentItems.filter(function(it) { return !it._storeItemDeleted; });
@@ -481,7 +487,9 @@
               comanda: clickComanda,
               garcom: sale.waiter_name || sale.desc_waiter || '',
               identificacao: sale.desc_sale || '',
-              total: sale.total_price || sale.total || 0,
+              // total zerado quando items_filtered=true: evita diff (total_original - totalItens_filtrado)
+              // ser interpretada como taxa de serviço — é na verdade o valor dos itens removidos
+              total: 0,
               taxa_servico: sale.service_fee || sale.service_tax || sale.service_tax_value || sale.fee_service || sale.taxa_servico || 0,
               pct_servico: clickPctStr,
               sale_items: [],
@@ -492,7 +500,9 @@
             // filterItems(true) = enviados, filterItems(false) = pendentes, _storeItemDeleted = removido
             var clickVm = scope.vm;
             var clickItems;
-            if (clickVm && typeof clickVm.filterItems === 'function') {
+            var clickFiltered = clickVm && typeof clickVm.filterItems === 'function';
+            result.items_filtered = clickFiltered; // sinaliza ao print_from_list que totais do scope não são comparáveis
+            if (clickFiltered) {
               var clickSent    = clickVm.filterItems(true)  || [];
               var clickPending = clickVm.filterItems(false) || [];
               var clickActive  = clickSent.filter(function(it) { return !it._storeItemDeleted; });

@@ -1914,8 +1914,8 @@
           }
         }
       }
-      // Fallback diferença: só aplica quando totalItens > 0 para evitar tratar itens como taxa
-      if (!taxaServico && totalItens > 0 && totalRef > totalItens + 0.01) {
+      // Fallback diferença: pula quando items_filtered=true — scope total inclui removidos → diff ≠ taxa
+      if (!taxaServico && totalItens > 0 && !raw.items_filtered && totalRef > totalItens + 0.01) {
         taxaServico = Math.round((totalRef - totalItens) * 100) / 100;
       }
 
