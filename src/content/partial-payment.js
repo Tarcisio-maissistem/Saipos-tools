@@ -1519,16 +1519,9 @@
       ? await fetchStoreInfo(storeId)
       : { idStore: '0', nome: getStoreNameFromDOM(), cnpj: '', endereco: '', cidade: '', serviceCharge: 0 };
 
-    // Fallback final: taxa de serviço via config do estabelecimento (shifts.service_charge)
-    // Fonte mais confiável — dados de configuração da loja, não da venda
-    if (!data.taxaServico && storeInfo.serviceCharge > 0) {
-      const pctNum = storeInfo.serviceCharge;
-      data.pctServico  = data.pctServico  || pctNum.toFixed(0) + '%';
-      data.taxaServico = Math.round(data.totalItens * (pctNum / 100) * 100) / 100;
-      data.totalGeral  = Math.round((data.totalItens + data.taxaServico) * 100) / 100;
-    }
-
-    // Valida taxa calculada contra config da loja — corrige se > 30% de desvio (valor fracionado)
+    // Cross-validação: corrige taxa fracionada se desvio > 30% do esperado pela config da loja
+    // Só atua quando taxa já foi encontrada (> 0) — não cria taxa do zero para evitar falso positivo
+    // em vendas sem taxa de serviço onde todos os steps acima retornaram 0 corretamente.
     if (data.taxaServico > 0 && storeInfo.serviceCharge > 0 && data.totalItens > 0) {
       const expectedTaxa = Math.round(data.totalItens * (storeInfo.serviceCharge / 100) * 100) / 100;
       if (expectedTaxa > 0 && Math.abs(data.taxaServico - expectedTaxa) / expectedTaxa > 0.30) {
