@@ -296,6 +296,14 @@
           taxa_servico: taxaVal,
           pct_servico:  pctStr,
           items_filtered: useFilterItems, // sinaliza que totais do scope não são comparáveis
+          tempo: (function() {
+            // Lê tempo de permanência do DOM (disponível na tela de edição e às vezes na close screen)
+            var el = document.querySelector('[data-qa="to-now-time"]');
+            if (el && el.parentElement) {
+              return (el.parentElement.textContent || '').replace(/Tempo:\s*/i, '').trim();
+            }
+            return '';
+          })(),
           payments: []
         };
 
@@ -492,6 +500,13 @@
               total: 0,
               taxa_servico: sale.service_fee || sale.service_tax || sale.service_tax_value || sale.fee_service || sale.taxa_servico || 0,
               pct_servico: clickPctStr,
+              tempo: (function() {
+                var el = document.querySelector('[data-qa="to-now-time"]');
+                if (el && el.parentElement) {
+                  return (el.parentElement.textContent || '').replace(/Tempo:\s*/i, '').trim();
+                }
+                return '';
+              })(),
               sale_items: [],
               payments: []
             };

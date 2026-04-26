@@ -1133,6 +1133,9 @@ async function loadLockConfig() {
     if (data[LOCK_KEY]) {
       lockConfig.password = data[LOCK_KEY].password || LOCK_DEFAULTS.password;
       lockConfig.locked   = Object.assign({}, LOCK_DEFAULTS.locked, data[LOCK_KEY].locked || {});
+      // LOG e ENTREGA sempre bloqueados independente de config salva anterior
+      lockConfig.locked.log     = true;
+      lockConfig.locked.entrega = true;
     }
     if (data[PRINTER_COLS_KEY]) currentPrinterCols = parseInt(data[PRINTER_COLS_KEY]) || 42;
     if (data[FONT_SIZE_KEY])    currentFontSize    = parseInt(data[FONT_SIZE_KEY])    || 12;

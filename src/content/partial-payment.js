@@ -1430,7 +1430,7 @@
       comanda: (saleData && saleData.comanda) || mesaInfo.comanda,
       garcom: (saleData && saleData.garcom) || mesaInfo.garcom,
       identificacao: (saleData && saleData.identificacao) || mesaInfo.identificacao,
-      tempo: mesaInfo.tempo || '',
+      tempo: (saleData && saleData.tempo) || mesaInfo.tempo || '',
       items,
       totalGeral,   // totalItens + taxaServico (inclui os 10%)
       totalItens,   // soma dos itens apenas
@@ -1963,6 +1963,7 @@
       const data = {
         saleId, mesa, comanda, garcom,
         identificacao: raw.identificacao || '',
+        tempo: raw.tempo || '',
         items, totalGeral, totalItens, taxaServico, pctServico,
         payments,
         _idUser: idUser || 0
