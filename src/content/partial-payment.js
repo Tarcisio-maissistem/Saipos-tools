@@ -1382,15 +1382,21 @@
       taxaServico = calcByPct(pctServico);
     }
     if (!taxaServico && saleData && saleData.taxa_servico > 0) {
-      taxaServico = saleData.taxa_servico;
+      // Mesmo sanity check do step 5 (DOM) — scope também pode ter valor fracionado pelo pgto parcial
+      const impliedPct = totalItens > 0 ? (saleData.taxa_servico / totalItens) * 100 : 0;
+      if (impliedPct > 0 && impliedPct <= 25) taxaServico = saleData.taxa_servico;
     }
 
-    // 3) Diferença via scope total_final (campo que inclui taxa de serviço)
-    if (!taxaServico && saleData && saleData.total_final > totalItens + 0.01) {
-      taxaServico = Math.round((saleData.total_final - totalItens) * 100) / 100;
+    // 3) Diferença via scope total_final (com taxa) − totalItens — valida % para rejeitar fracionado
+    if (!taxaServico && saleData && saleData.total_final > 0) {
+      const diff = Math.round((saleData.total_final - totalItens) * 100) / 100;
+      if (diff > 0) {
+        const impliedPct = totalItens > 0 ? (diff / totalItens) * 100 : 0;
+        if (impliedPct > 0 && impliedPct <= 25) taxaServico = diff;
+      }
     }
 
-    // 4) Diferença via total base do scope
+    // 4) Diferença via total base do scope — guarda: total > totalItens já filtra fracionado
     if (!taxaServico && saleData && saleData.total > totalItens + 0.01) {
       taxaServico = Math.round((saleData.total - totalItens) * 100) / 100;
     }
@@ -1430,10 +1436,22 @@
       try {
         const apiSale = await fetchJson(`https://api.saipos.com/v1/stores/${storeId}/sales/${saleId}`);
         if (apiSale) {
-          // Mesa / comanda / garçom
-          if (!data.mesa)    data.mesa    = apiSale.table_desc || apiSale.desc_table || apiSale.table || '';
-          if (!data.comanda) data.comanda = apiSale.command_order || apiSale.id_command_order || String(apiSale.command_number || '');
-          if (!data.garcom)  data.garcom  = apiSale.waiter_name  || apiSale.desc_waiter || '';
+          // Mesa / comanda / garçom — verifica também table_order aninhado (mesmo padrão do print_from_list)
+          if (!data.mesa) {
+            const apiTO = apiSale.table_order || {};
+            const apiTOTable = apiTO.table || {};
+            data.mesa = apiSale.table_desc || apiSale.desc_table || apiSale.table ||
+                        apiTO.table_desc || apiTOTable.desc_store_table || apiTOTable.table_desc || apiTOTable.table_name || '';
+          }
+          if (!data.comanda) {
+            const apiTO = apiSale.table_order || {};
+            const apiTOCard = apiTO.order_card || {};
+            data.comanda = apiTOCard.display_order_card || String(apiTOCard.id_store_order_card || '') ||
+                           apiSale.command_order || apiSale.id_command_order || String(apiSale.command_number || '') ||
+                           apiTO.command_order || String(apiTO.command_number || '') || '';
+          }
+          if (!data.garcom) data.garcom = apiSale.waiter_name || apiSale.desc_waiter ||
+            (apiSale.user && (apiSale.user.name || apiSale.user.desc_user)) || '';
 
           // Taxa de serviço — tenta todos os campos conhecidos + percentual + diferença de totais
           if (!data.taxaServico) {
@@ -1508,6 +1526,16 @@
       data.pctServico  = data.pctServico  || pctNum.toFixed(0) + '%';
       data.taxaServico = Math.round(data.totalItens * (pctNum / 100) * 100) / 100;
       data.totalGeral  = Math.round((data.totalItens + data.taxaServico) * 100) / 100;
+    }
+
+    // Valida taxa calculada contra config da loja — corrige se > 30% de desvio (valor fracionado)
+    if (data.taxaServico > 0 && storeInfo.serviceCharge > 0 && data.totalItens > 0) {
+      const expectedTaxa = Math.round(data.totalItens * (storeInfo.serviceCharge / 100) * 100) / 100;
+      if (expectedTaxa > 0 && Math.abs(data.taxaServico - expectedTaxa) / expectedTaxa > 0.30) {
+        data.taxaServico = expectedTaxa;
+        data.pctServico  = storeInfo.serviceCharge.toFixed(0) + '%';
+        data.totalGeral  = Math.round((data.totalItens + data.taxaServico) * 100) / 100;
+      }
     }
 
     return { data, storeInfo };
