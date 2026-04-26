@@ -293,8 +293,17 @@
           payments: []
         };
 
-        // Itens originais
-        var items = sale.sale_items || sale.items || sale.saleItems || [];
+        // Itens — usa filterItems() para excluir removidos e incluir pendentes (não enviados)
+        // filterItems(true) = enviados, filterItems(false) = pendentes, _storeItemDeleted = removido
+        var items;
+        if (typeof vm.filterItems === 'function') {
+          var sentItems    = vm.filterItems(true)  || [];
+          var pendingItems = vm.filterItems(false) || [];
+          var activeSent   = sentItems.filter(function(it) { return !it._storeItemDeleted; });
+          items = activeSent.concat(pendingItems);
+        } else {
+          items = sale.sale_items || sale.items || sale.saleItems || [];
+        }
         for (var j = 0; j < items.length; j++) {
           var it = items[j];
           result.sale_items.push({
@@ -479,10 +488,20 @@
               payments: []
             };
 
-            // Itens da comanda
-            var items = sale.sale_items || sale.items || sale.saleItems || [];
-            for (var j = 0; j < items.length; j++) {
-              var it = items[j];
+            // Itens — usa filterItems() do vm para excluir removidos e incluir pendentes
+            // filterItems(true) = enviados, filterItems(false) = pendentes, _storeItemDeleted = removido
+            var clickVm = scope.vm;
+            var clickItems;
+            if (clickVm && typeof clickVm.filterItems === 'function') {
+              var clickSent    = clickVm.filterItems(true)  || [];
+              var clickPending = clickVm.filterItems(false) || [];
+              var clickActive  = clickSent.filter(function(it) { return !it._storeItemDeleted; });
+              clickItems = clickActive.concat(clickPending);
+            } else {
+              clickItems = sale.sale_items || sale.items || sale.saleItems || [];
+            }
+            for (var j = 0; j < clickItems.length; j++) {
+              var it = clickItems[j];
               result.sale_items.push({
                 nome: it.desc_item || it.desc_sale_item || it.desc_store_item || it.name || it.product_name || '',
                 qtd: it.quantity || it.qty || 1,
