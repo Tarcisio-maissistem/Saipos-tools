@@ -1458,23 +1458,39 @@
           if (!data.comanda) {
             const apiTO = apiSale.table_order || {};
             const apiTOCard = apiTO.order_card || {};
-            data.comanda = apiTOCard.display_order_card || String(apiTOCard.id_store_order_card || '') ||
-                           apiSale.command_order || apiSale.id_command_order || String(apiSale.command_number || '') ||
-                           apiTO.command_order || String(apiTO.command_number || '') || '';
+            // Filtra valores falsy ou "0" (id_store_order_card pode ser 0 → String(0)="0" truthy mas inútil)
+            const toCardDisplay = apiTOCard.display_order_card ? String(apiTOCard.display_order_card) : '';
+            const toCardId      = apiTOCard.id_store_order_card > 0 ? String(apiTOCard.id_store_order_card) : '';
+            const apiCmdOrder   = apiSale.command_order   > 0 ? String(apiSale.command_order)   : '';
+            const apiCmdNum     = apiSale.command_number  > 0 ? String(apiSale.command_number)  : '';
+            const apiIdCmd      = apiSale.id_command_order > 0 ? String(apiSale.id_command_order) : '';
+            const toCmdOrder    = apiTO.command_order     > 0 ? String(apiTO.command_order)     : '';
+            data.comanda = toCardDisplay || toCardId || apiCmdOrder || apiCmdNum || apiIdCmd || toCmdOrder || '';
           }
           if (!data.garcom) data.garcom = apiSale.waiter_name || apiSale.desc_waiter ||
             (apiSale.user && (apiSale.user.name || apiSale.user.desc_user)) || '';
 
-          // Taxa de serviço — tenta todos os campos conhecidos + percentual + diferença de totais
+          // Taxa de serviço — mesma cadeia do print_from_list (evita duplicar lógica diferente)
           if (!data.taxaServico) {
-            data.taxaServico =
-              apiSale.service_fee       || apiSale.service_fee_value  ||
-              apiSale.service_tax       || apiSale.service_tax_value  ||
-              apiSale.service_value     || apiSale.service_charge     ||
-              apiSale.fee_service       || apiSale.taxa_servico       ||
-              apiSale.valor_servico     || apiSale.servico            || 0;
+            // 1) table_order.total_service_charge_amount — valor exato calculado pela API
+            const apiTO2 = apiSale.table_order || {};
+            if (apiTO2.total_service_charge_amount > 0) {
+              data.taxaServico = apiTO2.total_service_charge_amount;
+              if (!data.pctServico && apiTO2.service_charge > 0)
+                data.pctServico = apiTO2.service_charge.toFixed(0) + '%';
+            }
 
-            // Percentual → recalcula sobre totalItens (evita valor fracionado por pgto parcial)
+            // 2) Campos diretos na venda
+            if (!data.taxaServico) {
+              data.taxaServico =
+                apiSale.service_fee       || apiSale.service_fee_value  ||
+                apiSale.service_tax       || apiSale.service_tax_value  ||
+                apiSale.service_value     || apiSale.service_charge     ||
+                apiSale.fee_service       || apiSale.taxa_servico       ||
+                apiSale.valor_servico     || apiSale.servico            || 0;
+            }
+
+            // 3) Percentual → recalcula sobre totalItens (evita valor fracionado por pgto parcial)
             if (!data.pctServico) {
               const pct = apiSale.service_rate || apiSale.service_percentage ||
                           apiSale.serviceRate  || apiSale.service_fee_rate;
@@ -1485,21 +1501,33 @@
               }
             }
 
-            // Diferença: total_final (com taxa) − totalItens
+            // 4) shift aninhado (fonte mais confiável para %)
+            if (!data.taxaServico) {
+              const apiShift = apiSale.shift || {};
+              if (apiShift.use_service_charge === 'Y' && apiShift.service_charge > 0) {
+                data.pctServico  = data.pctServico || apiShift.service_charge.toFixed(0) + '%';
+                data.taxaServico = Math.round(data.totalItens * (apiShift.service_charge / 100) * 100) / 100;
+              }
+            }
+
+            // 5) store.shifts — loja pode ter turno com taxa de serviço
+            if (!data.taxaServico && apiSale.store && Array.isArray(apiSale.store.shifts)) {
+              const activeShift = apiSale.store.shifts.find(s => s.use_service_charge === 'Y' && s.service_charge > 0);
+              if (activeShift) {
+                data.pctServico  = data.pctServico || activeShift.service_charge.toFixed(0) + '%';
+                data.taxaServico = Math.round(data.totalItens * (activeShift.service_charge / 100) * 100) / 100;
+              }
+            }
+
+            // 6) Diferença: total_final (com taxa) − totalItens
             if (!data.taxaServico) {
               const apiTotalFinal = apiSale.final_total  || apiSale.grand_total ||
                                     apiSale.total_final  || apiSale.valor_total ||
                                     apiSale.total_amount || 0;
               if (apiTotalFinal > data.totalItens + 0.01) {
-                data.taxaServico = Math.round((apiTotalFinal - data.totalItens) * 100) / 100;
-              }
-            }
-
-            // Diferença genérica: qualquer total maior que totalItens
-            if (!data.taxaServico) {
-              const apiTotal = apiSale.total_price || apiSale.total || 0;
-              if (apiTotal > data.totalItens + 0.01) {
-                data.taxaServico = Math.round((apiTotal - data.totalItens) * 100) / 100;
+                const diff = Math.round((apiTotalFinal - data.totalItens) * 100) / 100;
+                const impliedPct = data.totalItens > 0 ? (diff / data.totalItens) * 100 : 0;
+                if (impliedPct > 0 && impliedPct <= 25) data.taxaServico = diff;
               }
             }
 
