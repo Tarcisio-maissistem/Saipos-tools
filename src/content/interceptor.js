@@ -320,11 +320,18 @@
         }
         for (var j = 0; j < items.length; j++) {
           var it = items[j];
+          // use_service_charge: 'Y'=cobra taxa, 'N'=isento (ex: Couvert Artístico)
+          var scFlag = 'Y';
+          try {
+            var si = it.getStoreItem ? it.getStoreItem() : null;
+            scFlag = (si && si.use_service_charge) || it.use_service_charge || 'Y';
+          } catch(e) {}
           result.sale_items.push({
             nome: it.desc_item || it.desc_sale_item || it.name || '',
             qtd: it.quantity || it.qty || 1,
             valor_unit: it.sale_price || it.unit_price || it.price || 0,
-            valor_total: it.total_price || it.total || 0
+            valor_total: it.total_price || it.total || 0,
+            use_service_charge: scFlag
           });
         }
 
@@ -527,11 +534,17 @@
             }
             for (var j = 0; j < clickItems.length; j++) {
               var it = clickItems[j];
+              var scFlag2 = 'Y';
+              try {
+                var si2 = it.getStoreItem ? it.getStoreItem() : null;
+                scFlag2 = (si2 && si2.use_service_charge) || it.use_service_charge || 'Y';
+              } catch(e) {}
               result.sale_items.push({
                 nome: it.desc_item || it.desc_sale_item || it.desc_store_item || it.name || it.product_name || '',
                 qtd: it.quantity || it.qty || 1,
                 valor_unit: it.sale_price || it.unit_price || it.price || 0,
-                valor_total: it.total_price || it.total || 0
+                valor_total: it.total_price || it.total || 0,
+                use_service_charge: scFlag2
               });
             }
 

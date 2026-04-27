@@ -546,7 +546,8 @@
       nome: item.nome,
       qtd: item.qtd,
       valorUnit: item.valor_unit,
-      valor: item.valor_total || (item.qtd * item.valor_unit)
+      valor: item.valor_total || (item.qtd * item.valor_unit),
+      use_service_charge: item.use_service_charge || 'Y' // 'N' = isento (ex: Couvert Artístico)
     })).filter(i => i.nome);
   }
 
@@ -574,7 +575,8 @@
         nome: it.desc_item || it.desc_sale_item || it.name || '',
         qtd: it.quantity || it.qty || 1,
         valorUnit: it.sale_price || it.unit_price || it.price || 0,
-        valor: it.total_price || it.total || 0
+        valor: it.total_price || it.total || 0,
+        use_service_charge: it.use_service_charge || it.charge_service_fee || 'Y'
       })).filter(i => i.nome);
     } catch (e) {
       return null;
@@ -1370,55 +1372,82 @@
 
     const totalItens = items.reduce((s, i) => s + i.valor, 0); // recalcula após HH
 
-    // Recalcula taxa de serviço — prioridade: percentual × totalItens > diferença scope > DOM direto
-    // DOM service-value pode estar FRACIONADO quando há pgto parcial registrado (bug reportado v6.48.4):
-    // Saipos exibe taxa proporcional ao que resta, não ao total — não usar como fonte primária.
-    let pctServico = totais.pctServico;
-    let taxaServico = 0; // começa zerado — não usa DOM direto para evitar valor fracionado
+    // Taxa de serviço — calcula sobre itens ELEGÍVEIS (respeita use_service_charge por produto)
+    // Prioridade: pct% × elegíveis > DOM service-value > scope raw > diferenças
+    let pctServico = totais.pctServico || (saleData && saleData.pct_servico) || '';
+    let taxaServico = 0;
 
-    // Função auxiliar: aplica percentual sobre totalItens
-    function calcByPct(pctStr) {
+    // Extrai número do pct string ("10,00 %" → 10)
+    function parsePct(pctStr) {
       const m = (pctStr || '').match(/([\d,]+)\s*%/);
-      if (!m) return 0;
-      const pct = parseFloat(m[1].replace(',', '.'));
-      return pct > 0 ? Math.round(totalItens * (pct / 100) * 100) / 100 : 0;
+      return m ? parseFloat(m[1].replace(',', '.')) : 0;
     }
 
-    // 1) DOM tem percentual → fonte mais confiável
-    if (pctServico) taxaServico = calcByPct(pctServico);
-
-    // 2) Scope Angular — percentual primeiro, valor como backup
-    if (!pctServico && saleData && saleData.pct_servico) {
-      pctServico = saleData.pct_servico;
-      taxaServico = calcByPct(pctServico);
+    // Soma itens elegíveis para taxa (use_service_charge !== 'N')
+    // Se nenhum item tem a flag → assume todos elegíveis (comportamento anterior seguro)
+    function eligibleTotal(arr) {
+      const hasFlag = arr.some(i => i.use_service_charge !== undefined);
+      if (!hasFlag) return arr.reduce((s, i) => s + i.valor, 0);
+      return arr.reduce((s, i) => i.use_service_charge !== 'N' ? s + i.valor : s, 0);
     }
+
+    // Calcula taxa por percentual aplicado sobre itens elegíveis
+    function calcByPctEligible(pctStr) {
+      const pct = parsePct(pctStr);
+      if (pct <= 0) return 0;
+      return Math.round(eligibleTotal(items) * (pct / 100) * 100) / 100;
+    }
+
+    // 1) pct% × itens elegíveis — mais preciso: respeita isenção por produto
+    if (pctServico) taxaServico = calcByPctEligible(pctServico);
+
+    // 2) DOM service-value — cálculo autoritativo do SAIPOS (já exclui itens isentos)
+    // Usar quando pct não estava disponível; cuidado com fracionamento em pgto parcial
+    if (!taxaServico && totais.taxaServico > 0) {
+      const hasParcial = payments.length > 0;
+      if (!hasParcial) {
+        // Sem pgto parcial → DOM value = valor total correto
+        taxaServico = totais.taxaServico;
+        if (!pctServico && totais.pctServico) pctServico = totais.pctServico;
+      } else {
+        // Com pgto parcial → DOM fracionado; tenta derivar pct e recalcular sobre elegíveis
+        const domPct = totalItens > 0 ? (totais.taxaServico / totalItens) * 100 : 0;
+        if (domPct > 0 && domPct <= 25) {
+          if (!pctServico) pctServico = Math.round(domPct) + '%';
+          taxaServico = calcByPctEligible(pctServico);
+        }
+      }
+    }
+
+    // 3) Scope — valor raw (com sanity check de % para rejeitar fracionado)
     if (!taxaServico && saleData && saleData.taxa_servico > 0) {
-      // Mesmo sanity check do step 5 (DOM) — scope também pode ter valor fracionado pelo pgto parcial
       const impliedPct = totalItens > 0 ? (saleData.taxa_servico / totalItens) * 100 : 0;
-      if (impliedPct > 0 && impliedPct <= 25) taxaServico = saleData.taxa_servico;
+      if (impliedPct > 0 && impliedPct <= 25) {
+        // Tem pct implícita → recalcula sobre elegíveis para respeitar isenções
+        if (!pctServico) pctServico = Math.round(impliedPct) + '%';
+        taxaServico = calcByPctEligible(pctServico);
+      }
     }
 
-    // 3) Diferença via scope total_final (com taxa) − totalItens — valida % para rejeitar fracionado
+    // 4) Diferença via scope total_final — valida % para rejeitar fracionado
     if (!taxaServico && saleData && saleData.total_final > 0) {
       const diff = Math.round((saleData.total_final - totalItens) * 100) / 100;
       if (diff > 0) {
         const impliedPct = totalItens > 0 ? (diff / totalItens) * 100 : 0;
-        if (impliedPct > 0 && impliedPct <= 25) taxaServico = diff;
+        if (impliedPct > 0 && impliedPct <= 25) {
+          if (!pctServico) pctServico = Math.round(impliedPct) + '%';
+          taxaServico = calcByPctEligible(pctServico);
+        }
       }
     }
 
-    // 4) Diferença via total base do scope — guarda: total > totalItens já filtra fracionado
+    // 5) Diferença via scope total — guarda: total > totalItens já filtra fracionado
     if (!taxaServico && saleData && saleData.total > totalItens + 0.01) {
-      taxaServico = Math.round((saleData.total - totalItens) * 100) / 100;
-    }
-
-    // 5) Último recurso: DOM direto — só usa se consistente com totalItens (não fracionado)
-    if (!taxaServico && totais.taxaServico > 0) {
-      // Sanity check: DOM value próximo ao esperado (±20% de tolerância para variações legítimas)
-      const domPct = totalItens > 0 ? (totais.taxaServico / totalItens) * 100 : 0;
-      if (domPct > 0 && domPct <= 25) {
-        taxaServico = totais.taxaServico;
-        if (!pctServico) pctServico = domPct.toFixed(0) + '%';
+      const diff = Math.round((saleData.total - totalItens) * 100) / 100;
+      const impliedPct = totalItens > 0 ? (diff / totalItens) * 100 : 0;
+      if (impliedPct > 0 && impliedPct <= 25) {
+        if (!pctServico) pctServico = Math.round(impliedPct) + '%';
+        taxaServico = calcByPctEligible(pctServico);
       }
     }
 
@@ -1490,32 +1519,32 @@
                 apiSale.valor_servico     || apiSale.servico            || 0;
             }
 
-            // 3) Percentual → recalcula sobre totalItens (evita valor fracionado por pgto parcial)
+            // 3) Percentual → recalcula sobre itens elegíveis (respeita isenção por produto)
             if (!data.pctServico) {
               const pct = apiSale.service_rate || apiSale.service_percentage ||
                           apiSale.serviceRate  || apiSale.service_fee_rate;
               if (pct) {
                 const pctNum = pct <= 1 ? pct * 100 : pct;
                 data.pctServico  = pctNum.toFixed(0) + '%';
-                data.taxaServico = Math.round(data.totalItens * (pctNum / 100) * 100) / 100;
+                data.taxaServico = Math.round(eligibleTotal(items) * (pctNum / 100) * 100) / 100;
               }
             }
 
-            // 4) shift aninhado (fonte mais confiável para %)
+            // 4) shift aninhado — pct × elegíveis
             if (!data.taxaServico) {
               const apiShift = apiSale.shift || {};
               if (apiShift.use_service_charge === 'Y' && apiShift.service_charge > 0) {
                 data.pctServico  = data.pctServico || apiShift.service_charge.toFixed(0) + '%';
-                data.taxaServico = Math.round(data.totalItens * (apiShift.service_charge / 100) * 100) / 100;
+                data.taxaServico = Math.round(eligibleTotal(items) * (apiShift.service_charge / 100) * 100) / 100;
               }
             }
 
-            // 5) store.shifts — loja pode ter turno com taxa de serviço
+            // 5) store.shifts — pct × elegíveis
             if (!data.taxaServico && apiSale.store && Array.isArray(apiSale.store.shifts)) {
               const activeShift = apiSale.store.shifts.find(s => s.use_service_charge === 'Y' && s.service_charge > 0);
               if (activeShift) {
                 data.pctServico  = data.pctServico || activeShift.service_charge.toFixed(0) + '%';
-                data.taxaServico = Math.round(data.totalItens * (activeShift.service_charge / 100) * 100) / 100;
+                data.taxaServico = Math.round(eligibleTotal(items) * (activeShift.service_charge / 100) * 100) / 100;
               }
             }
 
@@ -1559,15 +1588,18 @@
       ? await fetchStoreInfo(storeId)
       : { idStore: '0', nome: getStoreNameFromDOM(), cnpj: '', endereco: '', cidade: '', serviceCharge: 0 };
 
-    // Cross-validação: corrige taxa fracionada se desvio > 30% do esperado pela config da loja
-    // Só atua quando taxa já foi encontrada (> 0) — não cria taxa do zero para evitar falso positivo
-    // em vendas sem taxa de serviço onde todos os steps acima retornaram 0 corretamente.
-    if (data.taxaServico > 0 && storeInfo.serviceCharge > 0 && data.totalItens > 0) {
-      const expectedTaxa = Math.round(data.totalItens * (storeInfo.serviceCharge / 100) * 100) / 100;
-      if (expectedTaxa > 0 && Math.abs(data.taxaServico - expectedTaxa) / expectedTaxa > 0.30) {
-        data.taxaServico = expectedTaxa;
-        data.pctServico  = storeInfo.serviceCharge.toFixed(0) + '%';
-        data.totalGeral  = Math.round((data.totalItens + data.taxaServico) * 100) / 100;
+    // Cross-validação: corrige taxa fracionada se desvio > 30% do esperado
+    // Usa eligible total (respeita isenções) ao comparar com config da loja
+    // Só atua quando taxa > 0 — não cria taxa do zero para evitar falso positivo
+    if (data.taxaServico > 0 && storeInfo.serviceCharge > 0) {
+      const elTotal = eligibleTotal(items);
+      if (elTotal > 0) {
+        const expectedTaxa = Math.round(elTotal * (storeInfo.serviceCharge / 100) * 100) / 100;
+        if (expectedTaxa > 0 && Math.abs(data.taxaServico - expectedTaxa) / expectedTaxa > 0.30) {
+          data.taxaServico = expectedTaxa;
+          data.pctServico  = storeInfo.serviceCharge.toFixed(0) + '%';
+          data.totalGeral  = Math.round((data.totalItens + data.taxaServico) * 100) / 100;
+        }
       }
     }
 
