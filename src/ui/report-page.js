@@ -1,5 +1,9 @@
 // report-page.js — Script externo para o relatório (CSP-compliant) v6.38.0
 
+// ?date=YYYY-MM-DD → modo guia por dia (filtra SALES_DATA para esse dia)
+const _urlParams  = new URLSearchParams(window.location.search);
+const DAY_FILTER  = _urlParams.get('date') || null; // ex: "2026-04-24"
+
 let SALES_DATA = [];
 let STORE_NAME = 'Loja Saipos';
 let DATE_RANGE = null;
@@ -107,20 +111,43 @@ function pctLabel(pct, canceled) {
 }
 
 // Carrega dados do storage
-chrome.storage.local.get(['saiposReportData', 'saiposReportTimeFrom', 'saiposReportTimeTo', 'saiposSearchParams'], function(result) {
-  if (result.saiposReportData) {
-    SALES_DATA = result.saiposReportData.sales || [];
-    STORE_NAME = result.saiposReportData.storeName || 'Loja Saipos';
-    DATE_RANGE = result.saiposReportData.dateRange || null;
-    // Carrega filtros de horário se existirem
+// DAY_FILTER presente → usa saiposReportDayData (compartilhado, não apagado automaticamente)
+// Sem DAY_FILTER   → usa saiposReportData (apagado após leitura)
+const _storageKeys = ['saiposReportData', 'saiposReportDayData', 'saiposReportTimeFrom', 'saiposReportTimeTo', 'saiposSearchParams'];
+chrome.storage.local.get(_storageKeys, function(result) {
+  const reportData = DAY_FILTER
+    ? (result.saiposReportDayData || result.saiposReportData)
+    : result.saiposReportData;
+
+  if (reportData) {
+    let sales = reportData.sales || [];
+
+    // Modo por dia: filtra apenas vendas do dia solicitado
+    if (DAY_FILTER) {
+      sales = sales.filter(s => getSaleDate(s.dateText) === DAY_FILTER);
+      // Título da guia mostra só o dia
+      const [y, m, d] = DAY_FILTER.split('-');
+      document.title = `Relatório ${d}/${m}/${y} – Saipos Tools`;
+    }
+
+    SALES_DATA = sales;
+    STORE_NAME = reportData.storeName || 'Loja Saipos';
+    DATE_RANGE = DAY_FILTER
+      ? { start: DAY_FILTER, end: DAY_FILTER } // período = dia único
+      : (reportData.dateRange || null);
+
     TIME_FROM = result.saiposReportTimeFrom || (result.saiposSearchParams && result.saiposSearchParams.timeFrom) || '';
-    TIME_TO = result.saiposReportTimeTo || (result.saiposSearchParams && result.saiposSearchParams.timeTo) || '';
-    if (DATE_RANGE && DATE_RANGE.start && DATE_RANGE.end) {
+    TIME_TO   = result.saiposReportTimeTo   || (result.saiposSearchParams && result.saiposSearchParams.timeTo)   || '';
+
+    if (!DAY_FILTER && DATE_RANGE && DATE_RANGE.start && DATE_RANGE.end) {
       const fd = (d) => { const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
       document.title = 'Relatório ' + fd(DATE_RANGE.start) + ' a ' + fd(DATE_RANGE.end) + ' – Saipos Tools';
     }
+
     renderReport();
-    chrome.storage.local.remove(['saiposReportData']);
+
+    // Só apaga saiposReportData no modo normal (não apaga saiposReportDayData — outras guias ainda precisam)
+    if (!DAY_FILTER) chrome.storage.local.remove(['saiposReportData']);
   } else {
     document.querySelector('.page').innerHTML = '<div style="text-align:center;padding:60px;color:#991b1b"><h2>❌ Erro</h2><p>Dados do relatório não encontrados.</p><p>Por favor, extraia os dados novamente.</p></div>';
   }

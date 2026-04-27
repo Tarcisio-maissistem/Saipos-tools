@@ -82,6 +82,7 @@ function setButtons(running) {
   $('bPause').disabled  = !running;
   $('bStop').disabled   = !running;
   $('bReport').disabled =  running || allSales.length === 0;
+  if ($('bDayReport')) $('bDayReport').disabled = running || allSales.length === 0;
   const delBtn = $('bDeliveryReport');
   if (delBtn) delBtn.disabled = running || allSales.length === 0;
 }
@@ -150,6 +151,7 @@ $('bStart').addEventListener('click', async () => {
   currentSaleTypes = saleTypes;
 
   allSales = [];
+  allDateRange = null; // limpa período anterior para evitar relatório com datas erradas
   $('log-content').innerHTML = '';
   $('resumo-content').innerHTML = '<div class="empty"><big>👤</big>Processando...</div>';
   isRunning = true;
@@ -157,6 +159,8 @@ $('bStart').addEventListener('click', async () => {
   setStatus('run', 'Iniciando...');
   setProgress(0, 0);
   setButtons(true);
+  // Remove dados de relatório anteriores para garantir que novo relatório use só os novos dados
+  chrome.storage.local.remove(['saiposReportData', 'saiposReportDayData']).catch(() => {});
   chrome.runtime.sendMessage({ type: 'RESET' }).catch(() => {});
 
   // Salva parâmetros para uso nos relatórios (tempo e tipo)
@@ -330,6 +334,56 @@ $('bReport').addEventListener('click', async () => {
   chrome.tabs.create({ url: chrome.runtime.getURL('pages/report.html') });
 });
 
+// ── Relatório separado por dia (uma guia por dia, máx 15) ────
+$('bDayReport') && $('bDayReport').addEventListener('click', async () => {
+  const filteredSales = getSalesForCurrentFilters(allSales);
+  if (filteredSales.length === 0) return;
+
+  const dateFrom = $('pDateFrom').value;
+  const dateTo   = $('pDateTo').value;
+  if (!dateFrom || !dateTo) { alert('Defina o período nos campos Data De / Data Até.'); return; }
+
+  // Gera lista de dias do período
+  const days = [];
+  const cur = new Date(dateFrom + 'T00:00:00');
+  const end = new Date(dateTo   + 'T00:00:00');
+  while (cur <= end) {
+    days.push(cur.toISOString().slice(0, 10));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  if (days.length > 15) {
+    alert(`Período com ${days.length} dias — máximo permitido é 15.\nAjuste o filtro de datas.`);
+    return;
+  }
+  if (days.length === 0) { alert('Período inválido.'); return; }
+
+  // Extrai nome da loja
+  let storeName = 'Loja Saipos';
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab && tab.url && tab.url.includes('conta.saipos.com')) {
+    try {
+      const r = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => { const s = document.querySelector('span.tm-label[uib-tooltip]'); return s ? (s.getAttribute('uib-tooltip') || s.textContent.trim()) : null; }
+      });
+      if (r && r[0] && r[0].result) storeName = r[0].result;
+    } catch (_) {}
+  }
+
+  // Salva dados compartilhados (chave separada — não é apagada automaticamente pela guia de relatório)
+  await chrome.storage.local.set({
+    saiposReportDayData: { sales: filteredSales, storeName, dateRange: allDateRange },
+    saiposReportTimeFrom: $('pTimeFrom').value || '',
+    saiposReportTimeTo:   $('pTimeTo').value   || ''
+  });
+
+  // Abre uma guia por dia
+  for (const day of days) {
+    chrome.tabs.create({ url: chrome.runtime.getURL('pages/report.html') + '?date=' + day });
+  }
+});
+
 // ── Mensagens vindas do content / background ─────────────────
 chrome.runtime.onMessage.addListener(msg => {
   if (msg.type === 'LOG')      addLog(msg.entry);
@@ -344,7 +398,7 @@ chrome.runtime.onMessage.addListener(msg => {
     addLog({ msg: '❌ ' + (msg.msg || 'Erro desconhecido'), type: 'error', time: new Date().toLocaleTimeString('pt-BR') });
   }
   if (msg.type === 'DONE') {
-    if (allSales.length > 0 && msg.sales) return; // Prevent double DONE (background re-broadcasts)
+    if (allSales.length > 0 && msg.sales && isRunning) return; // Prevent double DONE durante coleta ativa
     // Filtra por tipos selecionados ([] = todos)
     allSales = currentSaleTypes.length > 0
       ? (msg.sales || []).filter(s => currentSaleTypes.includes(s.saleType))
