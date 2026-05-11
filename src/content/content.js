@@ -18,6 +18,8 @@
     debug:   true
   };
 
+  const EXT_VERSION = '6.53.5';
+
   // API state
   let _authHeaders = null;
   let _capturedCalls = [];
@@ -288,7 +290,7 @@
     date:       ['data', 'date', 'created_at', 'createdAt', 'data_venda', 'datetime', 'dateTime', 'data_criacao'],
     payment:    ['forma_pagamento', 'payment_method', 'paymentMethod', 'pagamento', 'payment', 'tipo_pagamento', 'desc_partner_sale'],
     subtotal:   ['total_amount_items', 'total_itens', 'totalItens', 'subtotal', 'items_total', 'itemsTotal', 'products_total', 'valor_produtos', 'valor_itens', 'total_items_value'],
-    taxa:       ['total_increase', 'taxa_servico', 'service_fee', 'serviceFee', 'taxa', 'tax', 'service_tax', 'taxa_de_servico', 'service_charge', 'service_charge_value', 'total_service_fee'],
+    taxa:       ['taxa_servico', 'service_fee', 'serviceFee', 'taxa', 'tax', 'service_tax', 'taxa_de_servico', 'service_charge', 'service_charge_value', 'total_service_fee'],
     total:      ['total_value', 'totalValue', 'valor_total', 'grand_total', 'total_sale', 'amount', 'total_amount'],
     canceled:   ['cancelado', 'canceled', 'cancelled', 'is_canceled', 'isCanceled', 'is_cancelled', 'is_deleted', 'deleted_at'],
     status:     ['status', 'estado', 'situacao', 'desc_sale_status', 'id_sale_status', 'sale_status'],
@@ -1065,19 +1067,20 @@
                 if (ti !== undefined && ti !== null) sale.totalItens = Number(ti);
 
                 // --- taxa (service fee) ---
-                // Strategy 1: direct named fields
+                // total_increase = acréscimo manual (campo separado no SAIPOS) — NÃO é taxa de serviço
+                // Strategy 1: campos dedicados de taxa de serviço (excluído total_increase intencionalmente)
                 let tx = null;
-                for (const key of ['total_increase', 'service_charge', 'service_fee', 'total_service_fee', 'tip', 'gorjeta', 'taxa_servico', 'service_charge_value', 'total_tip']) {
+                for (const key of ['service_charge', 'service_fee', 'total_service_fee', 'taxa_servico', 'service_charge_value', 'tip', 'gorjeta', 'total_tip']) {
                   if (typeof detail[key] === 'number' && detail[key] > 0) { tx = detail[key]; break; }
                 }
 
-                // Strategy 2: scan payments array for service fee entries
+                // Strategy 2: scan payments array — exclui increase/total_increase (são acréscimos, não taxa)
                 if (tx === null || tx === 0) {
                   const paymentsArr = detail.payments || detail.payment_types || [];
                   if (Array.isArray(paymentsArr)) {
                     for (const p of paymentsArr) {
                       if (!p || typeof p !== 'object') continue;
-                      for (const fk of ['service_charge', 'service_fee', 'tip', 'increase', 'total_increase', 'service_charge_value', 'gorjeta', 'taxa_servico']) {
+                      for (const fk of ['service_charge', 'service_fee', 'tip', 'service_charge_value', 'gorjeta', 'taxa_servico']) {
                         if (typeof p[fk] === 'number' && p[fk] > 0) {
                           tx = (tx || 0) + p[fk];
                         }
@@ -1086,14 +1089,16 @@
                   }
                 }
 
-                // Strategy 3: compute from total difference
-                // taxa = total_amount - total_amount_items + total_discount
+                // Strategy 3: diferença entre total e itens; subtrai acréscimo para não inflar taxa
+                // total_amount = total_amount_items - discount + service_fee + total_increase
+                // => service_fee = total_amount - total_amount_items + discount - total_increase
                 if ((tx === null || tx === 0) && typeof detail.total_amount === 'number' && typeof detail.total_amount_items === 'number') {
-                  const discount = typeof detail.total_discount === 'number' ? detail.total_discount : 0;
-                  const computed = detail.total_amount - detail.total_amount_items + discount;
+                  const discount  = typeof detail.total_discount  === 'number' ? detail.total_discount  : 0;
+                  const acrescimo = typeof detail.total_increase   === 'number' ? detail.total_increase   : 0;
+                  const computed  = detail.total_amount - detail.total_amount_items + discount - acrescimo;
                   if (computed > 0.01) {
                     tx = computed;
-                    if (fetchedCount === 0) debug('Taxa computed from difference: total_amount(' + detail.total_amount + ') - total_amount_items(' + detail.total_amount_items + ') + discount(' + discount + ') = ' + computed);
+                    if (fetchedCount === 0) debug('Taxa computed from difference: total_amount(' + detail.total_amount + ') - total_amount_items(' + detail.total_amount_items + ') + discount(' + discount + ') - acrescimo(' + acrescimo + ') = ' + computed);
                   }
                 }
 
@@ -1436,6 +1441,169 @@
     });
   }
 
+  function normalizeCategoryName(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  function extractCategoryName(category) {
+    return String(
+      category?.desc_store_category_item
+      || category?.desc_category_item
+      || category?.desc_category
+      || category?.name
+      || ''
+    ).trim();
+  }
+
+  function extractCategoryId(category) {
+    return category?.id_store_category_item || category?.id_category_item || category?.id || null;
+  }
+
+  function buildCategoryMap(categories) {
+    const map = new Map();
+    for (const category of Array.isArray(categories) ? categories : []) {
+      const id = extractCategoryId(category);
+      const name = extractCategoryName(category);
+      const normalizedName = normalizeCategoryName(name);
+      if (!id || !normalizedName) continue;
+      map.set(normalizedName, { id, name });
+    }
+    return map;
+  }
+
+  function buildCategoryPayloadFromSample(sampleCategory, categoryName, storeId) {
+    if (!sampleCategory || typeof sampleCategory !== 'object') return null;
+
+    let payload = null;
+    try {
+      payload = JSON.parse(JSON.stringify(sampleCategory));
+    } catch (_) {
+      return null;
+    }
+
+    for (const key of Object.keys(payload)) {
+      if (/^id_/i.test(key) || key === 'id') {
+        payload[key] = 0;
+      }
+    }
+
+    payload.id_store = parseInt(storeId, 10);
+    payload.desc_store_category_item = categoryName;
+    payload.desc_category_item = categoryName;
+    payload.desc_category = categoryName;
+    if ('name' in payload) payload.name = categoryName;
+    if ('enabled' in payload && !payload.enabled) payload.enabled = 'Y';
+    if ('online_order' in payload && !payload.online_order) payload.online_order = 'Y';
+    if ('digital_menu' in payload && !payload.digital_menu) payload.digital_menu = 'Y';
+    if ('print_type' in payload && !payload.print_type) payload.print_type = 1;
+    if ('order' in payload && !payload.order) payload.order = 1;
+
+    return payload;
+  }
+
+  function discoverCategoryEndpoints(storeId, capturedCalls) {
+    const endpoints = new Set();
+    const calls = Array.isArray(capturedCalls) ? capturedCalls : [];
+
+    for (const call of calls) {
+      const url = String(call?.url || '');
+      if (!url || !/category|categor/i.test(url)) continue;
+
+      const cleanUrl = url.split('?')[0].replace(/\/+$|\s+$/g, '');
+      if (!cleanUrl.includes('api.saipos.com')) continue;
+
+      const normalizedUrl = cleanUrl.replace(/\/stores\/\d+\//, `/stores/${storeId}/`);
+      endpoints.add(normalizedUrl);
+    }
+
+    const hardcoded = [
+      `https://api.saipos.com/v1/stores/${storeId}/category_items`,
+      `https://api.saipos.com/v1/stores/${storeId}/category_item`,
+      `https://api.saipos.com/v1/category_items`,
+      `https://api.saipos.com/v1/category_item`,
+      `https://api.saipos.com/v1/store_category_items`,
+      `https://api.saipos.com/v1/store_category_item`,
+      `https://api.saipos.com/v1/stores/${storeId}/store_category_items`,
+      `https://api.saipos.com/v1/stores/${storeId}/store_category_item`,
+      `https://api.saipos.com/v1/categories`,
+      `https://api.saipos.com/v1/stores/${storeId}/categories`,
+      `https://api.saipos.com/v1/store_categories`,
+      `https://api.saipos.com/v1/stores/${storeId}/store_categories`
+    ];
+
+    for (const url of hardcoded) endpoints.add(url);
+
+    return Array.from(endpoints);
+  }
+
+  async function createCategoryWithFallbacks(storeId, categoryName, options = {}) {
+    const sampleCategory = options.sampleCategory || null;
+    const capturedCalls = options.capturedCalls || [];
+    const payloadVariants = [
+      {
+        desc_store_category_item: categoryName,
+        desc_category_item: categoryName,
+        desc_category: categoryName,
+        enabled: 'Y',
+        online_order: 'Y',
+        digital_menu: 'Y',
+        print_type: 1,
+        order: 1
+      },
+      {
+        id_store: parseInt(storeId, 10),
+        id_store_category_item: 0,
+        desc_store_category_item: categoryName,
+        desc_category_item: categoryName,
+        desc_category: categoryName,
+        enabled: 'Y',
+        online_order: 'Y',
+        digital_menu: 'Y',
+        print_type: 1,
+        order: 1
+      }
+    ];
+
+    const samplePayload = buildCategoryPayloadFromSample(sampleCategory, categoryName, storeId);
+    if (samplePayload) payloadVariants.unshift(samplePayload);
+
+    const endpoints = discoverCategoryEndpoints(storeId, capturedCalls);
+
+    const attempts = [];
+
+    for (const url of endpoints) {
+      for (const body of payloadVariants) {
+        const response = await mainWorldFetch(url, 'POST', body);
+        const createdId = extractCategoryId(response?.data || response);
+        if (createdId) {
+          return {
+            id: createdId,
+            url,
+            body,
+            response
+          };
+        }
+
+        attempts.push({
+          url,
+          bodyKeys: Object.keys(body),
+          response: JSON.stringify(response || {}).substring(0, 180)
+        });
+
+        if (!response?.error && !response?.status) {
+          break;
+        }
+      }
+    }
+
+    throw new Error(`Nenhum endpoint aceitou criar o grupo. Tentativas: ${attempts.map(a => `${a.url} [${a.bodyKeys.join(',')}] => ${a.response}`).join(' | ')}`);
+  }
+
   function getStoreIdFromUrl() {
     // Tenta pegar de uma chamada capturada (mais confiável)
     const c = _capturedCalls.find(x => x.url && x.url.includes('/stores/'));
@@ -1446,6 +1614,34 @@
     const m = window.location.href.match(/\/stores\/(\d+)\//);
     if (m) return m[1];
     return null;
+  }
+
+  function getCurrentStoreMeta() {
+    const storeId = getStoreIdFromUrl();
+    let storeName = '';
+
+    try {
+      const rootEl = document.querySelector('[ng-app]') || document.body;
+      const injector = window.angular && window.angular.element(rootEl).injector();
+      const rootScope = injector && injector.get('$rootScope');
+      const currentStore = rootScope && rootScope.currentStore;
+      storeName = String(
+        currentStore?.desc_store
+        || currentStore?.store_name
+        || currentStore?.name
+        || currentStore?.fantasy_name
+        || ''
+      ).trim();
+    } catch (_) {}
+
+    if (!storeName) {
+      try {
+        const title = document.title || '';
+        storeName = title.replace(/\s*[-|]\s*saipos.*$/i, '').trim();
+      } catch (_) {}
+    }
+
+    return { storeId, storeName };
   }
 
   async function saveHH() {
@@ -1636,21 +1832,45 @@
       return true;
     }
 
+    if (msg.action === 'GET_STOCK_CONTEXT') {
+      (async () => {
+        try {
+          let { storeId, storeName } = getCurrentStoreMeta();
+          if (!storeId) {
+            await getCapturedCalls();
+            ({ storeId, storeName } = getCurrentStoreMeta());
+          }
+          if (!storeId) return sendResponse({ error: 'StoreId não encontrado. Abra a loja atual no Saipos e atualize a página.' });
+
+          sendResponse({ success: true, storeId, storeName: storeName || `Loja ${storeId}` });
+        } catch (err) {
+          sendResponse({ error: err.message });
+        }
+      })();
+      return true;
+    }
+
     // ── DELETE ALL STOCK: apaga todos os produtos do catálogo um a um ──
     if (msg.action === 'DELETE_ALL_STOCK') {
       (async () => {
         try {
-          let storeId = getStoreIdFromUrl();
-          if (!storeId) { await getCapturedCalls(); storeId = getStoreIdFromUrl(); }
+          let { storeId, storeName } = getCurrentStoreMeta();
+          if (!storeId) {
+            await getCapturedCalls();
+            ({ storeId, storeName } = getCurrentStoreMeta());
+          }
           if (!storeId) return sendResponse({ error: 'StoreId não encontrado.' });
+          if (msg.expectedStoreId && String(msg.expectedStoreId) !== String(storeId)) {
+            return sendResponse({ error: `Segurança bloqueou a exclusão: a loja ativa é ${storeId} e a confirmação foi feita para ${msg.expectedStoreId}.` });
+          }
           if (!_authHeaders) {
             const h = await getAuthHeaders();
             if (!h) return sendResponse({ error: 'Auth indisponível. Faça login no Saipos.' });
           }
 
-          sendResponse({ started: true }); // responde imediatamente; progresso vem via mensagens
+          sendResponse({ started: true, storeId, storeName: storeName || `Loja ${storeId}` }); // responde imediatamente; progresso vem via mensagens
 
-          emit('STOCK_LOG', { text: '🔍 Carregando lista de produtos...' });
+          emit('STOCK_LOG', { text: `🔍 Carregando produtos da loja atual: ${storeName || `Loja ${storeId}`} (ID ${storeId})...` });
 
           // Busca todos os itens do catálogo
           const filter = encodeURIComponent(JSON.stringify({ limit: 5000, skip: 0 }));
@@ -1728,11 +1948,27 @@
           let errCount = 0;
           // v6.6.0 — armazena IDs criados para possibilitar rollback
           const createdProducts = [];
+          // v6.53.1 — parseia antes para criar categorias primeiro e produtos depois
+          const parsedRows = rows.map((row, index) => {
+            const cols = row.split(',');
+            return {
+              index,
+              raw: row,
+              nome: cols[0]?.trim() || '',
+              valor: parseFloat(cols[1]?.trim()),
+              categoria: cols[2]?.trim() || '',
+              descricao: cols[3]?.trim() || '',
+              pesado: cols[4]?.trim().toUpperCase() === 'S' ? 'Y' : 'N',
+              taxa: (cols[5] && cols[5].trim().toUpperCase() === 'N') ? 'N' : 'Y'
+            };
+          }).filter(item => item.nome);
 
-          emit('CSV_LOG', { text: `⏳ Iniciando importação de ${rows.length} produtos... Buscando chaves da loja...` });
+          emit('CSV_LOG', { text: `⏳ Iniciando importação de ${parsedRows.length} produtos... Buscando chaves da loja... <small>(Saipos Tools v${EXT_VERSION})</small>` });
           
           let defaultCategoryId = null;
           let storeCategories = [];
+          let categoryMap = new Map();
+          let capturedCallsForCategories = [];
           try {
             const tUrl = `https://api.saipos.com/v1/stores/${storeId}/items?filter=` + encodeURIComponent(JSON.stringify({ limit: 1 }));
             const tRes = await mainWorldFetch(tUrl);
@@ -1742,7 +1978,13 @@
             const catUrl = `https://api.saipos.com/v1/stores/${storeId}/category_items?filter=` + encodeURIComponent(JSON.stringify({ limit: 2000 }));
             const catRes = await mainWorldFetch(catUrl);
             storeCategories = catRes?.data?.rows || catRes?.data || [];
+            categoryMap = buildCategoryMap(storeCategories);
           } catch (e) {
+          }
+
+          try {
+            capturedCallsForCategories = await getCapturedCalls();
+          } catch (_) {
           }
 
           let defaultVariationId = null;
@@ -1761,62 +2003,92 @@
           } catch(e) {
           }
 
-          emit('CSV_LOG', { text: `⏳ Preparando importação de ${rows.length} produtos... (Pausa anti-ban 700ms ativada)` });
+          const requestedCategories = Array.from(new Set(
+            parsedRows
+              .map(item => item.categoria)
+              .filter(category => category && normalizeCategoryName(category) !== 'sem categoria')
+          ));
 
-          for (let i = 0; i < rows.length; i++) {
-            const cols = rows[i].split(',');
-            if (cols.length < 2) continue;
+          if (requestedCategories.length > 0) {
+            emit('CSV_LOG', { text: `⏳ Validando ${requestedCategories.length} grupos/categorias antes de inserir os produtos...` });
 
-            const p_nome      = cols[0]?.trim() || '';
-            const p_valor     = parseFloat(cols[1]?.trim());
-            const p_categoria = cols[2]?.trim() || '';
-            const p_descricao = cols[3]?.trim() || '';
-            const p_pesado    = cols[4]?.trim().toUpperCase() === 'S' ? 'Y' : 'N';
-            const p_taxa      = (cols[5] && cols[5].trim().toUpperCase() === 'N') ? 'N' : 'Y';
+            for (const categoryName of requestedCategories) {
+              const normalizedName = normalizeCategoryName(categoryName);
+              if (categoryMap.has(normalizedName)) continue;
+
+              emit('CSV_LOG', { text: `⏳ Grupo "${categoryName}" não encontrado. Criando...` });
+              try {
+                const createdCategoryResult = await createCategoryWithFallbacks(storeId, categoryName, {
+                  sampleCategory: storeCategories[0] || null,
+                  capturedCalls: capturedCallsForCategories
+                });
+                const createdId = createdCategoryResult.id;
+
+                const createdCategory = {
+                  id_store_category_item: createdId,
+                  desc_store_category_item: categoryName,
+                  desc_category_item: categoryName,
+                  desc_category: categoryName
+                };
+                storeCategories.push(createdCategory);
+                categoryMap.set(normalizedName, { id: createdId, name: categoryName });
+                emit('CSV_LOG', { text: `✅ Grupo "${categoryName}" criado (ID: ${createdId}).` });
+                await sleep(250);
+              } catch (e) {
+                errCount++;
+                emit('CSV_LOG', { text: `❌ Erro ao criar grupo "${categoryName}": ${e.message}<br/><small>Build carregado: v${EXT_VERSION}</small>` });
+              }
+            }
+
+            try {
+              // Recarrega do backend para garantir que o mapa final use exatamente os IDs persistidos no Saipos.
+              const refreshUrl = `https://api.saipos.com/v1/stores/${storeId}/category_items?filter=` + encodeURIComponent(JSON.stringify({ limit: 2000 }));
+              const refreshRes = await mainWorldFetch(refreshUrl);
+              storeCategories = refreshRes?.data?.rows || refreshRes?.data || storeCategories;
+              categoryMap = buildCategoryMap(storeCategories);
+            } catch (_) {
+            }
+          }
+
+          emit('CSV_LOG', { text: `⏳ Preparando importação de ${parsedRows.length} produtos... (Pausa anti-ban 700ms ativada)` });
+
+          for (let i = 0; i < parsedRows.length; i++) {
+            const product = parsedRows[i];
+            const p_nome = product.nome;
+            const p_valor = product.valor;
+            const p_categoria = product.categoria;
+            const p_descricao = product.descricao;
+            const p_pesado = product.pesado;
+            const p_taxa = product.taxa;
+            let categoryEntry = null;
             
             let finalCategoryId = defaultCategoryId;
 
-            // v6.6.0 — busca categoria por múltiplos campos possíveis da API
             if (p_categoria && p_categoria.toLowerCase() !== 'sem categoria') {
-              const catNorm = p_categoria.toLowerCase();
-              let catMatch = storeCategories.find(c => {
-                const desc = (c.desc_category || c.desc_category_item || c.desc_store_category_item || '').toLowerCase();
-                return desc === catNorm;
-              });
-              if (catMatch) {
-                finalCategoryId = catMatch.id_store_category_item || catMatch.id;
-              } else {
-                // v4.9.0 — Cria categoria que não existe antes de prosseguir
-                emit('CSV_LOG', { text: `⏳ Categoria "${p_categoria}" não encontrada. Criando...` });
-                try {
-                  // Inclui todos os campos de nome possíveis (a API aceita variantes)
-                  const newCat = {
-                    desc_store_category_item: p_categoria,
-                    desc_category_item: p_categoria,
-                    desc_category: p_categoria,
-                    enabled: "Y",
-                    online_order: "Y",
-                    digital_menu: "Y",
-                    print_type: 1,
-                    order: 1
-                  };
-                  const cRes = await mainWorldFetch(`https://api.saipos.com/v1/stores/${storeId}/category_items`, 'POST', newCat);
-                  const newCatId = cRes?.data?.id_store_category_item
-                    || cRes?.data?.id_category_item
-                    || cRes?.data?.id;
-                  if (newCatId) {
-                    finalCategoryId = newCatId;
-                    // Adiciona ao cache local para reusar se aparecer novamente no CSV
-                    storeCategories.push({ desc_store_category_item: p_categoria, id_store_category_item: newCatId });
-                    emit('CSV_LOG', { text: `✅ Categoria "${p_categoria}" criada (ID: ${newCatId}).` });
-                  } else {
-                    emit('CSV_LOG', { text: `⚠️ Falha ao criar categoria "${p_categoria}". Resposta: ${JSON.stringify(cRes || {}).substring(0, 120)}` });
-                  }
-                } catch(e) {
-                  emit('CSV_LOG', { text: `❌ Erro ao criar categoria "${p_categoria}": ${e.message}` });
-                }
+              categoryEntry = categoryMap.get(normalizeCategoryName(p_categoria));
+              if (!categoryEntry?.id) {
+                errCount++;
+                emit('CSV_LOG', { text: `⚠️ Produto "${p_nome}" ignorado: grupo "${p_categoria}" não foi cadastrado corretamente.` });
+                await sleep(250);
+                continue;
               }
+              finalCategoryId = categoryEntry.id;
+            } else if (!finalCategoryId) {
+              errCount++;
+              emit('CSV_LOG', { text: `⚠️ Produto "${p_nome}" ignorado: a loja não possui categoria padrão e o CSV não informou uma categoria válida.` });
+              await sleep(250);
+              continue;
             }
+
+            const categoryPayload = finalCategoryId ? [{
+              id_store_category_item: finalCategoryId,
+              id_category_item: finalCategoryId,
+              desc_store_category_item: categoryEntry?.name || p_categoria || '',
+              desc_category_item: categoryEntry?.name || p_categoria || '',
+              desc_category: categoryEntry?.name || p_categoria || '',
+              order: 1,
+              enabled: 'Y'
+            }] : [];
 
             const payload = {
               "id_store": parseInt(storeId),
@@ -1855,7 +2127,7 @@
                   "ingredient_portion_variation": []
                 }
               ],
-              "categories": [],
+              "categories": categoryPayload,
               "choices": [],
               "availability": [],
               "production_owner": "P",
@@ -1868,17 +2140,39 @@
 
                 if (res && res.error) {
                     errCount++;
+                emit('CSV_LOG', { text: `❌ Erro ao inserir "${p_nome}": ${res.error}` });
                 } else {
                     successCount++;
                     // v6.6.0 — salva ID do produto criado para rollback
                     const newId = res?.data?.id_store_item || res?.data?.id;
+                    const createdCategoryId = res?.data?.id_store_category_item || res?.data?.category?.id_store_category_item || null;
                     if (newId) createdProducts.push({ id: newId, nome: p_nome, categoria: p_categoria });
+
+                    if (newId && finalCategoryId && String(createdCategoryId || '') !== String(finalCategoryId)) {
+                      try {
+                        const getUrl = `https://api.saipos.com/v1/stores/${storeId}/items/${newId}`;
+                        const getRes = await mainWorldFetch(getUrl);
+                        const fullItem = getRes?.data || getRes;
+                        if (fullItem && !fullItem.error) {
+                          fullItem.id_store_category_item = finalCategoryId;
+                          fullItem.categories = categoryPayload;
+                          const putRes = await mainWorldFetch(getUrl, 'PUT', fullItem);
+                          if (putRes?.error) {
+                            emit('CSV_LOG', { text: `⚠️ Produto "${p_nome}" criado, mas o Saipos manteve a categoria padrão. Correção falhou: ${putRes.error}` });
+                          } else {
+                            emit('CSV_LOG', { text: `🔁 Categoria de "${p_nome}" corrigida para "${categoryEntry?.name || p_categoria || 'categoria informada'}".` });
+                          }
+                        }
+                      } catch (fixErr) {
+                        emit('CSV_LOG', { text: `⚠️ Produto "${p_nome}" criado com possível categoria incorreta. Falha ao corrigir: ${fixErr.message}` });
+                      }
+                    }
                 }
             } catch (err) {
                 errCount++;
             }
 
-            emit('CSV_LOG', { text: `⏳ Importando: ${i + 1}/${rows.length}...` });
+            emit('CSV_LOG', { text: `⏳ Importando: ${i + 1}/${parsedRows.length}...` });
 
             await sleep(700);
           }

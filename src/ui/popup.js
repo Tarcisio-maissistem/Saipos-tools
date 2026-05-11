@@ -3,7 +3,9 @@ let allSales = [];
 let allDateRange = null;
 let isRunning = false;
 let isPaused  = false;
+let reportTabOpened = false; // evita dupla abertura quando DONE chega mais de uma vez
 let currentSaleTypes = []; // [] = todos; ex: [1,3] = Entrega + Salão
+let pendingDeleteStore = null;
 
 // ── Catraca: estado inicial (sobrescrito por loadLockConfig) ──
 const TAB_LABELS = { log: 'LOG', resumo: 'COMISSÕES', happyhour: 'HAPPY HOUR', csv: 'IMPORTAR', entrega: 'ENTREGA', estoque: 'ESTOQUE' };
@@ -115,6 +117,15 @@ async function sendContent(action) {
   if (!tab) return null;
   return chrome.tabs.sendMessage(tab.id, { action }).catch(() => null);
 }
+
+async function getActiveSaiposTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) throw new Error('Aba do Saipos não encontrada!');
+  if (!tab.url || !tab.url.includes('conta.saipos.com')) {
+    throw new Error('Abra a loja atual no conta.saipos.com antes de continuar.');
+  }
+  return tab;
+}
 // ── API STATUS ───────────────────────────────────────────
 function setApiStatus(status, label) {
   const dot = $('apiDot');
@@ -152,6 +163,7 @@ $('bStart').addEventListener('click', async () => {
 
   allSales = [];
   allDateRange = null; // limpa período anterior para evitar relatório com datas erradas
+  reportTabOpened = false; // reseta para próxima coleta
   $('log-content').innerHTML = '';
   $('resumo-content').innerHTML = '<div class="empty"><big>👤</big>Processando...</div>';
   isRunning = true;
@@ -398,7 +410,7 @@ chrome.runtime.onMessage.addListener(msg => {
     addLog({ msg: '❌ ' + (msg.msg || 'Erro desconhecido'), type: 'error', time: new Date().toLocaleTimeString('pt-BR') });
   }
   if (msg.type === 'DONE') {
-    if (allSales.length > 0 && msg.sales && isRunning) return; // Prevent double DONE durante coleta ativa
+    if (reportTabOpened) return; // background re-envia a mensagem — ignora duplicata
     // Filtra por tipos selecionados ([] = todos)
     allSales = currentSaleTypes.length > 0
       ? (msg.sales || []).filter(s => currentSaleTypes.includes(s.saleType))
@@ -410,6 +422,7 @@ chrome.runtime.onMessage.addListener(msg => {
     setButtons(false);
     renderResumo(filteredSales);
     renderAlertas(filteredSales);
+    reportTabOpened = true; // marca antes do setTimeout para bloquear qualquer DONE extra
     // Se somente Entrega selecionada → abre rel. entrega; caso contrário → comissões
     const onlyEntrega = currentSaleTypes.length === 1 && currentSaleTypes[0] === 1;
     addLog({ msg: `🎉 Pronto! ${filteredSales.length} vendas · abrindo ${onlyEntrega ? 'rel. entrega' : 'relatório'}...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
@@ -1090,29 +1103,58 @@ $('btnBackup').addEventListener('click', async () => {
 });
 
 // ── Apagar Todo o Estoque ────────────────────────────────────
-$('btnDeleteAll').addEventListener('click', () => {
-  // Abre overlay de confirmação em vez de confirm() nativo
-  $('stockConfirmOverlay').classList.add('show');
+$('btnDeleteAll').addEventListener('click', async () => {
+  try {
+    const tab = await getActiveSaiposTab();
+    const res = await chrome.tabs.sendMessage(tab.id, { action: 'GET_STOCK_CONTEXT' });
+    if (!res) throw new Error('Sem resposta. Recarregue a página do Saipos.');
+    if (res.error) throw new Error(res.error);
+
+    pendingDeleteStore = {
+      id: String(res.storeId),
+      name: res.storeName || `Loja ${res.storeId}`
+    };
+
+    $('stockConfirmStore').innerHTML = `Loja atual: <b>${pendingDeleteStore.name}</b> <span style="opacity:.75">(ID ${pendingDeleteStore.id})</span>`;
+    $('stockDeleteCode').value = '';
+    $('stockDeleteExpected').textContent = `APAGAR ${pendingDeleteStore.id}`;
+    $('stockDeleteError').style.display = 'none';
+    $('stockConfirmOverlay').classList.add('show');
+    $('stockDeleteCode').focus();
+  } catch (err) {
+    stockLogMsg(`❌ Erro: ${err.message}`);
+  }
 });
 
 $('btnCancelDelete').addEventListener('click', () => {
   $('stockConfirmOverlay').classList.remove('show');
+  pendingDeleteStore = null;
 });
 
 $('btnConfirmDelete').addEventListener('click', async () => {
+  const expectedCode = pendingDeleteStore ? `APAGAR ${pendingDeleteStore.id}` : '';
+  const typedCode = ($('stockDeleteCode').value || '').trim().toUpperCase();
+  if (!pendingDeleteStore || typedCode !== expectedCode) {
+    $('stockDeleteError').style.display = 'block';
+    $('stockDeleteCode').focus();
+    return;
+  }
+
   $('stockConfirmOverlay').classList.remove('show');
+  $('stockDeleteError').style.display = 'none';
 
   const btn = $('btnDeleteAll');
   btn.disabled = true;
   btn.textContent = '⏳ Deletando...';
   $('stockOpArea').style.display = '';
-  stockLogMsg('🗑️ Iniciando exclusão de todos os produtos...');
+  $('stockProgFill').style.width = '0%';
+  $('stockProgLabel').textContent = '0 / 0';
+  stockLogMsg(`🗑️ Iniciando exclusão da loja atual: ${pendingDeleteStore.name} (ID ${pendingDeleteStore.id})...`);
 
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) throw new Error('Aba do Saipos não encontrada!');
+    const tab = await getActiveSaiposTab();
 
-    const res = await chrome.tabs.sendMessage(tab.id, { action: 'DELETE_ALL_STOCK' });
+    const res = await chrome.tabs.sendMessage(tab.id, { action: 'DELETE_ALL_STOCK', expectedStoreId: pendingDeleteStore.id });
     if (!res) throw new Error('Sem resposta. Recarregue a página do Saipos.');
     if (res.error) throw new Error(res.error);
     // res.started === true — o progresso vem via STOCK_LOG + STOCK_DELETE_DONE
@@ -1120,6 +1162,8 @@ $('btnConfirmDelete').addEventListener('click', async () => {
     stockLogMsg(`❌ Erro: ${err.message}`);
     btn.disabled = false;
     btn.textContent = '🗑️ Apagar Todo o Estoque';
+  } finally {
+    pendingDeleteStore = null;
   }
 });
 
