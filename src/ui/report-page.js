@@ -1,4 +1,4 @@
-// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.4
+// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.5
 
 // ?date=YYYY-MM-DD → modo guia por dia (filtra SALES_DATA para esse dia)
 const _urlParams  = new URLSearchParams(window.location.search);
@@ -136,8 +136,9 @@ chrome.storage.local.get(_storageKeys, function(result) {
       ? { start: DAY_FILTER, end: DAY_FILTER } // período = dia único
       : (reportData.dateRange || null);
 
-    TIME_FROM = result.saiposReportTimeFrom || (result.saiposSearchParams && result.saiposSearchParams.timeFrom) || '';
-    TIME_TO   = result.saiposReportTimeTo   || (result.saiposSearchParams && result.saiposSearchParams.timeTo)   || '';
+    // ?? (nullish) garante que '' (string vazia = sem filtro) não caia no fallback saiposSearchParams
+    TIME_FROM = result.saiposReportTimeFrom ?? (result.saiposSearchParams?.timeFrom ?? '');
+    TIME_TO   = result.saiposReportTimeTo   ?? (result.saiposSearchParams?.timeTo   ?? '');
 
     if (!DAY_FILTER && DATE_RANGE && DATE_RANGE.start && DATE_RANGE.end) {
       const fd = (d) => { const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
