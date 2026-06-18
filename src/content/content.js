@@ -18,7 +18,7 @@
     debug:   true
   };
 
-  const EXT_VERSION = '6.54.6';
+  const EXT_VERSION = '6.54.7';
 
   // API state
   let _authHeaders = null;
@@ -1127,6 +1127,18 @@
                 }
                 if (!sale.mesa) sale.mesa = unwrapField(detail.table_number || detail.desc_table || '');
                 if (!sale.comanda) sale.comanda = unwrapField(detail.sale_number || detail.order_card || detail.number_order_card || '');
+
+                // Atualiza dateText com datetime completo do detalhe
+                // (endpoint de lista frequentemente retorna só "YYYY-MM-DD" sem hora → filtro de horário não funciona)
+                if (!sale.dateText.match(/\d{2}:\d{2}/)) {
+                  const dtCandidates = ['created_at', 'createdAt', 'datetime', 'dateTime', 'data_venda', 'date', 'data'];
+                  for (const k of dtCandidates) {
+                    if (detail[k]) {
+                      const better = formatDate(String(detail[k]));
+                      if (better.match(/\d{2}:\d{2}/)) { sale.dateText = better; break; }
+                    }
+                  }
+                }
 
                 // Secundary Canceled check using detail object
                 let detCanceled = false;

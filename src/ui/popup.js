@@ -432,6 +432,13 @@ chrome.runtime.onMessage.addListener(msg => {
     renderAlertas(filteredSales);
     reportTabOpened = true; // marca antes do setTimeout para bloquear qualquer DONE extra
 
+    // Diagnóstico: mostra formato de dateText → confirma se filtro de horário consegue extrair hora
+    if (allSales.length > 0) {
+      const sample = allSales[0].dateText || '(vazio)';
+      const horaEx = getSaleTime(sample);
+      addLog({ msg: `🕐 dateText[0]: "${sample}" → hora: "${horaEx || '❌ não extraída — filtro de hora IGNORADO'}"`, type: horaEx ? 'info' : 'warn', time: new Date().toLocaleTimeString('pt-BR') });
+    }
+
     // v6.54.3 — diagnostica quando filtros removem todas as vendas
     if (rawSales.length > 0 && filteredSales.length === 0) {
       const tf = $('pTimeFrom') ? $('pTimeFrom').value : '';

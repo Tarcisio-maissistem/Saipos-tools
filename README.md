@@ -1,4 +1,4 @@
-# Saipos Tools v6.54.6
+# Saipos Tools v6.54.7
 
 Extensão para Google Chrome que adiciona funcionalidades extras ao painel [SAIPOS](https://conta.saipos.com): **Relatórios de Comissão**, **Relatório de Entregas**, **Happy Hour Automático**, **Resumo da Conta com Impressão**, **Importação de Produtos** e **Gestão de Estoque**.
 
@@ -196,4 +196,4 @@ Este é um **projeto pessoal, sem fins lucrativos**, desenvolvido com o intuito 
 
 ---
 
-_Saipos Tools v6.54.6 — Junho / 2026_
+_Saipos Tools v6.54.7 — Junho / 2026_

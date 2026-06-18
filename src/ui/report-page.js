@@ -1,4 +1,4 @@
-// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.6
+// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.7
 
 // ?date=YYYY-MM-DD → modo guia por dia (filtra SALES_DATA para esse dia)
 const _urlParams  = new URLSearchParams(window.location.search);
