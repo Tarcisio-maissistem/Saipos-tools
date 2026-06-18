@@ -161,6 +161,18 @@ $('bStart').addEventListener('click', async () => {
   const saleTypes = Array.from(document.querySelectorAll('#pSaleTypes input:checked')).map(el => Number(el.value));
   currentSaleTypes = saleTypes;
 
+  // v6.54.2 — valida período antes de qualquer mutação de estado
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    alert('⚠️ Data final deve ser maior ou igual à data inicial.');
+    return;
+  }
+  const sameDay = dateFrom && dateTo && dateFrom === dateTo;
+  const onlyTimes = !dateFrom && !dateTo;
+  if ((sameDay || onlyTimes) && timeFrom && timeTo && timeTo < timeFrom) {
+    alert('⚠️ Horário final deve ser maior que o horário inicial.\n\nInício: ' + timeFrom + '  →  Fim: ' + timeTo);
+    return;
+  }
+
   allSales = [];
   allDateRange = null; // limpa período anterior para evitar relatório com datas erradas
   reportTabOpened = false; // reseta para próxima coleta
