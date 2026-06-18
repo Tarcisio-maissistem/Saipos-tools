@@ -18,7 +18,7 @@
     debug:   true
   };
 
-  const EXT_VERSION = '6.54.5';
+  const EXT_VERSION = '6.54.6';
 
   // API state
   let _authHeaders = null;

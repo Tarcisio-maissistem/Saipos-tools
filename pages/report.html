@@ -51,7 +51,7 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
 .venda-wrap:last-child{border-bottom:none}
 .venda-head{background:#f8fafc;padding:8px 14px;display:flex;gap:14px;align-items:center;
             flex-wrap:wrap;border-bottom:1px solid #e5e7eb}
-.venda-head .tag{font-size:11px;color:#6b7280}
+.venda-head .tag{font-size:11px;color:#6b7280;white-space:nowrap}
 .venda-head .tag b{color:#1a1d27;font-size:12px}
 
 /* ─── Badges ─── */
@@ -67,6 +67,8 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
 .items-table thead th{background:#f1f5f9;padding:6px 12px;text-align:left;font-size:10px;
    text-transform:uppercase;letter-spacing:.4px;color:#64748b;font-weight:600;white-space:nowrap}
 .items-table tbody td{padding:6px 12px;border-bottom:1px solid #f1f5f9;font-size:12px;vertical-align:middle}
+/* colunas numéricas e de garçom não quebram — só a coluna de nome (1ª) pode ser elástica */
+.items-table tbody td:not(:first-child){white-space:nowrap}
 .items-table tbody tr:last-child td{border-bottom:none}
 .items-table tbody tr:hover td{background:#fafafa}
 .items-table .tr-cancel td{opacity:.45;text-decoration:line-through}
@@ -88,6 +90,7 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
 
 /* ─── Resumo global ─── */
 .global-section{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:28px;overflow:hidden}
+.global-table-wrap{overflow-x:auto} /* scroll horizontal sem quebrar border-radius do pai */
 .global-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding:14px 18px;background:#f8fafc;border-bottom:1px solid #e5e7eb}
 .global-title{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:700;color:#0f1117;margin:0}
 .filter-wrap{display:flex;align-items:center;gap:10px}
@@ -96,10 +99,10 @@ body{font-family:'IBM Plex Sans',sans-serif;background:#f0f2f5;color:#1a1d27;fon
    background:#fff;color:#0f1117;cursor:pointer;min-width:200px;font-family:'IBM Plex Sans',sans-serif}
 .select-garcom:focus{outline:none;border-color:#00c27c;box-shadow:0 0 0 3px rgba(0,194,124,.15)}
 .select-garcom:hover{border-color:#9ca3af}
-.global-table{width:100%;border-collapse:collapse;background:#fff}
+.global-table{width:100%;border-collapse:collapse;background:#fff;min-width:480px}
 .global-table thead th{background:#0f1117;color:#fff;padding:10px 14px;font-size:11px;
-   text-transform:uppercase;letter-spacing:.4px;font-weight:600}
-.global-table tbody td{padding:9px 14px;border-bottom:1px solid #f1f5f9;font-size:13px}
+   text-transform:uppercase;letter-spacing:.4px;font-weight:600;white-space:nowrap}
+.global-table tbody td{padding:9px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;white-space:nowrap}
 .global-table tbody tr:last-child td{border-bottom:none}
 .global-table tbody tr:hover td{background:#fafafa}
 .btn-copy-garcom{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border:none;border-radius:5px;

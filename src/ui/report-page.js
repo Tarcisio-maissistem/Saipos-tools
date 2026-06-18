@@ -1,4 +1,4 @@
-// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.5
+// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.6
 
 // ?date=YYYY-MM-DD → modo guia por dia (filtra SALES_DATA para esse dia)
 const _urlParams  = new URLSearchParams(window.location.search);
@@ -274,7 +274,7 @@ function renderReport() {
       </select>
     </div>
   </div>
-  <table class="global-table">
+  <div class="global-table-wrap"><table class="global-table">
   <thead><tr>
     <th>Garçom</th><th class="tr">Total Vendido</th>
     <th class="tr">Total Comissão</th><th class="tc">Itens</th><th class="tc">Ações</th>
@@ -301,7 +301,7 @@ function renderReport() {
   <td class="tc">—</td>
 </tr>`;
   }
-  H += `</tbody></table></div>`;
+  H += `</tbody></table></div></div>`; // </table> </global-table-wrap> </global-section>
 
   H += `<div style="margin-top:8px;padding:6px 14px;font-size:11px;color:#92400e;background:#fefce8;border-radius:6px;border:1px solid #fde68a">
     <b>*</b> Produto isento de taxa de serviço — não contabilizado na comissão.
