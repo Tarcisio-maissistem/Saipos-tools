@@ -252,28 +252,44 @@ $('btnClearLog').addEventListener('click', () => {
   if (lc) lc.innerHTML = '<div class="empty"><big>🤖</big>Log limpo.</div>';
 });
 
-// ── RELATÓRIO ENTREGAS ─────────────────────────────────────────────
-$('bDeliveryReport').addEventListener('click', async () => {
-  const filteredSales = getSalesForCurrentFilters(allSales);
-  if (filteredSales.length === 0) return;
+// ── Helpers de abertura de relatório (v6.54.2) ──────────────
+// Chamados diretamente — sem simular click (evita falha silenciosa por botão disabled)
 
-  // Extrai nome da loja do DOM (mesmo método do relatório de comissões)
-  let storeName = 'Loja Saipos';
+async function _getStoreName() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.url && tab.url.includes('conta.saipos.com')) { // só executa em tab do Saipos
+    if (tab && tab.url && tab.url.includes('conta.saipos.com')) {
       const res = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => {
           const span = document.querySelector('span.tm-label[uib-tooltip]');
-          return span ? span.textContent.trim() : null;
+          if (!span) return null;
+          return span.getAttribute('uib-tooltip') || span.textContent.trim() || null;
         }
       });
-      if (res && res[0] && res[0].result) storeName = res[0].result;
+      if (res && res[0] && res[0].result) return res[0].result;
     }
   } catch (_) {}
+  return 'Loja Saipos';
+}
 
-  // Filter: only delivery type (saleType === 1) and NOT canceled
+async function openCommissionReport() {
+  const sales = getSalesForCurrentFilters(allSales);
+  if (!sales || sales.length === 0) return;
+  const storeName = await _getStoreName();
+  await chrome.storage.local.set({
+    saiposReportData: { sales, storeName, dateRange: allDateRange },
+    saiposReportTimeFrom: $('pTimeFrom') ? ($('pTimeFrom').value || '') : '',
+    saiposReportTimeTo:   $('pTimeTo')   ? ($('pTimeTo').value   || '') : ''
+  });
+  chrome.tabs.create({ url: chrome.runtime.getURL('pages/report.html') });
+}
+
+async function openDeliveryReport() {
+  const filteredSales = getSalesForCurrentFilters(allSales);
+  if (!filteredSales || filteredSales.length === 0) return;
+  const storeName = await _getStoreName();
+
   let deliverySales = filteredSales.filter(s => !s.canceled && s.saleType === 1);
   const isFallback = deliverySales.length === 0;
   if (isFallback) deliverySales = filteredSales.filter(s => !s.canceled);
@@ -295,54 +311,18 @@ $('bDeliveryReport').addEventListener('click', async () => {
           if (nameMap[id] && (!s.entregador || !s.entregador.trim())) s.entregador = nameMap[id];
         });
       }
-    } catch(e) {}
+    } catch (_) {}
   }
 
   await chrome.storage.local.set({
     saiposDeliveryData: { sales: deliverySales, storeName, dateRange: allDateRange, fallback: isFallback }
   });
-
   chrome.tabs.create({ url: chrome.runtime.getURL('pages/delivery-report.html') });
-});
-$('bReport').addEventListener('click', async () => {
-  const filteredSales = getSalesForCurrentFilters(allSales);
-  if (filteredSales.length === 0) return;
+}
 
-  // v6.54.1 — tab só serve para nome da loja (opcional); não bloqueia abertura do relatório
-  let storeName = 'Loja Saipos';
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab && tab.url && tab.url.includes('conta.saipos.com')) {
-      const storeResult = await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          const span = document.querySelector('span.tm-label[uib-tooltip]');
-          if (span) {
-            const tooltip = span.getAttribute('uib-tooltip');
-            if (tooltip) return tooltip;
-          }
-          if (span) return span.textContent.trim();
-          return null;
-        }
-      });
-      if (storeResult && storeResult[0] && storeResult[0].result) storeName = storeResult[0].result;
-    }
-  } catch (_) {}
-
-  // Salva dados no storage para a página de relatório
-  await chrome.storage.local.set({
-    saiposReportData: {
-      sales: filteredSales,
-      storeName: storeName,
-      dateRange: allDateRange
-    },
-    saiposReportTimeFrom: $('pTimeFrom') ? $('pTimeFrom').value || '' : '',
-    saiposReportTimeTo: $('pTimeTo') ? $('pTimeTo').value || '' : ''
-  });
-
-  // Abre a página de relatório
-  chrome.tabs.create({ url: chrome.runtime.getURL('pages/report.html') });
-});
+// ── RELATÓRIO ENTREGAS ─────────────────────────────────────────────
+$('bDeliveryReport').addEventListener('click', () => { openDeliveryReport(); });
+$('bReport').addEventListener('click', () => { openCommissionReport(); });
 
 // ── Relatório separado por dia (uma guia por dia, máx 15) ────
 $('bDayReport') && $('bDayReport').addEventListener('click', async () => {
@@ -426,8 +406,9 @@ chrome.runtime.onMessage.addListener(msg => {
     addLog({ msg: `🎉 Pronto! ${filteredSales.length} vendas · abrindo ${onlyEntrega ? 'rel. entrega' : 'relatório'}...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
 
     setTimeout(() => {
-      if (onlyEntrega) $('bDeliveryReport').click();
-      else             $('bReport').click();
+      // v6.54.2 — chama função diretamente (não simula click para evitar falha por botão disabled)
+      if (onlyEntrega) openDeliveryReport();
+      else             openCommissionReport();
     }, 500);
   }
 });
