@@ -1,4 +1,4 @@
-// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.7
+// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.8
 
 // ?date=YYYY-MM-DD → modo guia por dia (filtra SALES_DATA para esse dia)
 const _urlParams  = new URLSearchParams(window.location.search);
@@ -83,15 +83,42 @@ function getSaleTime(dateText, withSeconds = false) {
   return match[2] ? `${match[1]}:${match[2]}` : match[1];
 }
 
+// Converte string de data para "YYYY-MM-DD" (aceita "DD/MM/YYYY" ou "YYYY-MM-DD")
+function dateToISO(dateStr) {
+  const text = String(dateStr || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.substring(0, 10);
+  const m = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return m[3] + '-' + m[2] + '-' + m[1];
+  return '';
+}
+
 function saleMatchesTimeFilter(sale) {
   if (!TIME_FROM && !TIME_TO) return true;
 
   const hora = getSaleTime(sale && sale.dateText);
-  if (!hora) return true;
+  if (!hora) return true; // sem hora → não filtra
 
-  if (TIME_FROM && hora < TIME_FROM) return false;
-  if (TIME_TO && hora > TIME_TO) return false;
-  return true;
+  // Virada de meia-noite: TIME_TO < TIME_FROM (ex: 02:00 < 16:00)
+  const isCrossMidnight = TIME_FROM && TIME_TO && TIME_TO < TIME_FROM;
+
+  if (!isCrossMidnight) {
+    if (TIME_FROM && hora < TIME_FROM) return false;
+    if (TIME_TO   && hora > TIME_TO)   return false;
+    return true;
+  }
+
+  // Virada: compara data+hora completa "YYYY-MM-DD HH:MM"
+  if (DATE_RANGE && DATE_RANGE.start && DATE_RANGE.end) {
+    const saleDate = dateToISO(getSaleDate(sale.dateText)); // "DD/MM/YYYY" → "YYYY-MM-DD"
+    if (saleDate) {
+      const saleDT  = saleDate + ' ' + hora;
+      const startDT = dateToISO(DATE_RANGE.start) + ' ' + TIME_FROM;
+      const endDT   = dateToISO(DATE_RANGE.end)   + ' ' + TIME_TO;
+      return saleDT >= startDT && saleDT <= endDT;
+    }
+  }
+  // Fallback sem data: inclui se hora pertence ao bloco noturno
+  return hora >= TIME_FROM || hora <= TIME_TO;
 }
 
 function getFilteredSales() {

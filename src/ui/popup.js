@@ -34,14 +34,48 @@ function getSaleTime(dateText, withSeconds = false) {
   return match[2] ? `${match[1]}:${match[2]}` : match[1];
 }
 
+// Converte dateText para "YYYY-MM-DD" (aceita formato BR "DD/MM/YYYY" ou ISO)
+function getSaleDateISO(dateText) {
+  const text = String(dateText || '').trim();
+  const isoM = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (isoM) return isoM[1];
+  const brM = text.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (brM) return brM[3] + '-' + brM[2] + '-' + brM[1];
+  return '';
+}
+
 function filterSalesByTimeRange(sales, timeFrom, timeTo) {
   if (!timeFrom && !timeTo) return Array.isArray(sales) ? [...sales] : [];
+
+  // Virada de meia-noite: timeTo < timeFrom (ex: 02:00 < 16:00)
+  // Nesse caso usa comparação de data+hora completa usando os campos de data do formulário
+  const isCrossMidnight = timeFrom && timeTo && timeTo < timeFrom;
+  const dateFrom = isCrossMidnight && $('pDateFrom') ? $('pDateFrom').value : '';
+  const dateTo   = isCrossMidnight && $('pDateTo')   ? $('pDateTo').value   : '';
+
   return (sales || []).filter(sale => {
     const hora = getSaleTime(sale.dateText);
-    if (!hora) return true;
-    if (timeFrom && hora < timeFrom) return false;
-    if (timeTo && hora > timeTo) return false;
-    return true;
+    if (!hora) return true; // sem hora → não filtra
+
+    if (!isCrossMidnight) {
+      // Faixa normal (mesmo dia): comparação simples
+      if (timeFrom && hora < timeFrom) return false;
+      if (timeTo   && hora > timeTo)   return false;
+      return true;
+    }
+
+    // Virada: compara data+hora completa "YYYY-MM-DD HH:MM"
+    if (dateFrom && dateTo) {
+      const saleDate = getSaleDateISO(sale.dateText);
+      if (saleDate) {
+        const saleDT  = saleDate + ' ' + hora;
+        const startDT = dateFrom + ' ' + timeFrom;
+        const endDT   = dateTo   + ' ' + timeTo;
+        return saleDT >= startDT && saleDT <= endDT;
+      }
+    }
+    // Fallback sem data: inclui se hora pertence ao bloco noturno
+    return hora >= timeFrom || hora <= timeTo;
   });
 }
 
