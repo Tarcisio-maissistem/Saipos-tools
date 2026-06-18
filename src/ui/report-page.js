@@ -1,4 +1,4 @@
-// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.2
+// report-page.js — Script externo para o relatório (CSP-compliant) v6.54.4
 
 // ?date=YYYY-MM-DD → modo guia por dia (filtra SALES_DATA para esse dia)
 const _urlParams  = new URLSearchParams(window.location.search);
@@ -205,11 +205,13 @@ function renderReport() {
   const cozinhaComissaoGlobal = pctCozinha !== null ? gtItens * (pctCozinha / 100) : 0;
   const totalComissaoCompleto = totalComissaoGlobal + cozinhaComissaoGlobal;
 
-  // Formata período de datas
+  // Formata período de datas (inclui horário quando filtro ativo)
   let periodoLabel = '';
   if (DATE_RANGE && DATE_RANGE.start && DATE_RANGE.end) {
     const fmtDate = (d) => { const p = d.split('-'); return p.length === 3 ? p[2]+'/'+p[1]+'/'+p[0] : d; };
-    periodoLabel = fmtDate(DATE_RANGE.start) + ' a ' + fmtDate(DATE_RANGE.end);
+    const startStr = fmtDate(DATE_RANGE.start) + (TIME_FROM ? ` ${TIME_FROM}` : '');
+    const endStr   = fmtDate(DATE_RANGE.end)   + (TIME_TO   ? ` ${TIME_TO}`   : '');
+    periodoLabel = startStr + ' a ' + endStr;
   } else {
     const dates = sales.filter(s => s.dateText).map(s => getSaleDate(s.dateText)).sort();
     if (dates.length > 0) periodoLabel = dates[0] + ' a ' + dates[dates.length - 1];

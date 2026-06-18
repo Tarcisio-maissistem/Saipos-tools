@@ -305,10 +305,13 @@ async function openCommissionReport() {
   }
 
   const storeName = await _getStoreName();
+  // Se usamos allSales (bypass do filtro horário), não repassa o filtro para o relatório
+  // (senão report-page.js aplica novamente e mostra 0 resultados)
+  const bypassed = sales === allSales && (($('pTimeFrom') && $('pTimeFrom').value) || ($('pTimeTo') && $('pTimeTo').value));
   await chrome.storage.local.set({
     saiposReportData: { sales, storeName, dateRange: allDateRange },
-    saiposReportTimeFrom: $('pTimeFrom') ? ($('pTimeFrom').value || '') : '',
-    saiposReportTimeTo:   $('pTimeTo')   ? ($('pTimeTo').value   || '') : ''
+    saiposReportTimeFrom: bypassed ? '' : ($('pTimeFrom') ? ($('pTimeFrom').value || '') : ''),
+    saiposReportTimeTo:   bypassed ? '' : ($('pTimeTo')   ? ($('pTimeTo').value   || '') : '')
   });
   chrome.tabs.create({ url: chrome.runtime.getURL('pages/report.html') });
 }
