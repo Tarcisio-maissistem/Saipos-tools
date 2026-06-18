@@ -43,7 +43,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  chrome.runtime.sendMessage(msg).catch(() => {});
+  // v6.54.3 — LOG não é re-enviado: painel já recebe direto do content script
+  // (re-enviar causava cada LOG aparecer 2× no painel)
+  // Re-envia apenas mensagens de controle que o painel pode perder se estava fechado
+  if (msg.type !== 'LOG') {
+    chrome.runtime.sendMessage(msg).catch(() => {});
+  }
   sendResponse({ ok: true });
   return true;
 });

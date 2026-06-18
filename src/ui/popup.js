@@ -286,8 +286,24 @@ async function _getStoreName() {
 }
 
 async function openCommissionReport() {
-  const sales = getSalesForCurrentFilters(allSales);
-  if (!sales || sales.length === 0) return;
+  let sales = getSalesForCurrentFilters(allSales);
+
+  // v6.54.3 — se filtro de horário removeu tudo mas allSales tem dados, abre sem filtro horário
+  if ((!sales || sales.length === 0) && allSales.length > 0) {
+    const tf = $('pTimeFrom') ? $('pTimeFrom').value : '';
+    const tt = $('pTimeTo')   ? $('pTimeTo').value   : '';
+    if (tf || tt) {
+      addLog({ msg: `⚠️ Filtro de horário (${tf||'--'}–${tt||'--'}) removeu todas as vendas — abrindo relatório com período completo.`, type: 'warn', time: new Date().toLocaleTimeString('pt-BR') });
+      sales = allSales; // usa todas as vendas sem filtro de horário
+    } else {
+      addLog({ msg: '⚠️ Nenhuma venda disponível para o relatório. Execute a coleta novamente.', type: 'error', time: new Date().toLocaleTimeString('pt-BR') });
+      return;
+    }
+  } else if (!sales || sales.length === 0) {
+    addLog({ msg: '⚠️ Nenhuma venda disponível. Execute a coleta novamente.', type: 'error', time: new Date().toLocaleTimeString('pt-BR') });
+    return;
+  }
+
   const storeName = await _getStoreName();
   await chrome.storage.local.set({
     saiposReportData: { sales, storeName, dateRange: allDateRange },
@@ -401,24 +417,44 @@ chrome.runtime.onMessage.addListener(msg => {
   }
   if (msg.type === 'DONE') {
     if (reportTabOpened) return; // background re-envia a mensagem — ignora duplicata
+    const rawSales = msg.sales || [];
     // Filtra por tipos selecionados ([] = todos)
     allSales = currentSaleTypes.length > 0
-      ? (msg.sales || []).filter(s => currentSaleTypes.includes(s.saleType))
-      : (msg.sales || []);
+      ? rawSales.filter(s => currentSaleTypes.includes(s.saleType))
+      : rawSales;
     const filteredSales = getSalesForCurrentFilters(allSales);
     allDateRange = msg.dateRange || null;
     isRunning = false;
-    setStatus('done', `✅ ${filteredSales.length} vendas concluídas`);
     setButtons(false);
-    renderResumo(filteredSales);
     renderAlertas(filteredSales);
     reportTabOpened = true; // marca antes do setTimeout para bloquear qualquer DONE extra
-    // Se somente Entrega selecionada → abre rel. entrega; caso contrário → comissões
+
+    // v6.54.3 — diagnostica quando filtros removem todas as vendas
+    if (rawSales.length > 0 && filteredSales.length === 0) {
+      const tf = $('pTimeFrom') ? $('pTimeFrom').value : '';
+      const tt = $('pTimeTo')   ? $('pTimeTo').value   : '';
+      if (currentSaleTypes.length > 0 && allSales.length === 0) {
+        // Filtro de tipo de venda removeu tudo
+        const tiposStr = currentSaleTypes.join(', ');
+        setStatus('warn', `⚠️ 0 vendas — tipo de venda selecionado (${tiposStr}) não encontrado no período`);
+        addLog({ msg: `⚠️ ${rawSales.length} vendas coletadas, mas nenhuma é do tipo selecionado (${tiposStr}). Desmarque o filtro e tente novamente.`, type: 'error', time: new Date().toLocaleTimeString('pt-BR') });
+        renderResumo([]);
+        return;
+      } else if (tf || tt) {
+        // Filtro de horário removeu tudo — openCommissionReport vai abrir com allSales
+        setStatus('warn', `⚠️ Filtro ${tf||'--'}–${tt||'--'} removeu tudo — abrindo relatório completo`);
+        addLog({ msg: `⚠️ Filtro de horário (${tf||'--'}–${tt||'--'}) removeu todas as ${allSales.length} vendas. Relatório será aberto sem filtro de horário.`, type: 'warn', time: new Date().toLocaleTimeString('pt-BR') });
+      }
+    } else {
+      setStatus('done', `✅ ${filteredSales.length} vendas concluídas`);
+    }
+    renderResumo(filteredSales.length > 0 ? filteredSales : allSales);
+
     const onlyEntrega = currentSaleTypes.length === 1 && currentSaleTypes[0] === 1;
-    addLog({ msg: `🎉 Pronto! ${filteredSales.length} vendas · abrindo ${onlyEntrega ? 'rel. entrega' : 'relatório'}...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
+    addLog({ msg: `🎉 Pronto! ${filteredSales.length > 0 ? filteredSales.length : allSales.length} vendas · abrindo ${onlyEntrega ? 'rel. entrega' : 'relatório'}...`, type: 'info', time: new Date().toLocaleTimeString('pt-BR') });
 
     setTimeout(() => {
-      // v6.54.2 — chama função diretamente (não simula click para evitar falha por botão disabled)
+      // chama função diretamente (não simula click para evitar falha por botão disabled)
       if (onlyEntrega) openDeliveryReport();
       else             openCommissionReport();
     }, 500);
