@@ -18,7 +18,7 @@
     debug:   true
   };
 
-  const EXT_VERSION = '6.53.5';
+  const EXT_VERSION = '6.54.1';
 
   // API state
   let _authHeaders = null;
@@ -1441,6 +1441,31 @@
     });
   }
 
+  // v6.54.0 — parser CSV correto: respeita aspas e vírgulas dentro de campos
+  function parseCSVLine(line) {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') { // aspas escapadas ""
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result;
+  }
+
   function normalizeCategoryName(value) {
     return String(value || '')
       .normalize('NFD')
@@ -1948,9 +1973,9 @@
           let errCount = 0;
           // v6.6.0 — armazena IDs criados para possibilitar rollback
           const createdProducts = [];
-          // v6.53.1 — parseia antes para criar categorias primeiro e produtos depois
+          // v6.54.0 — usa parseCSVLine para suportar vírgulas dentro de campos com aspas
           const parsedRows = rows.map((row, index) => {
-            const cols = row.split(',');
+            const cols = parseCSVLine(row); // antes: row.split(',') quebrava com vírgulas em nomes
             return {
               index,
               raw: row,
@@ -2003,14 +2028,27 @@
           } catch(e) {
           }
 
-          const requestedCategories = Array.from(new Set(
-            parsedRows
-              .map(item => item.categoria)
-              .filter(category => category && normalizeCategoryName(category) !== 'sem categoria')
-          ));
+          // v6.54.0 — deduplica por nome normalizado para evitar criar "Bebidas" e "BEBIDAS" como categorias distintas
+          const requestedCategories = [];
+          const seenNormalizedCategories = new Set();
+          for (const item of parsedRows) {
+            const cat = item.categoria;
+            if (!cat) continue;
+            const norm = normalizeCategoryName(cat);
+            if (norm === 'sem categoria' || seenNormalizedCategories.has(norm)) continue;
+            seenNormalizedCategories.add(norm);
+            requestedCategories.push(cat); // mantém nome original para exibição/criação
+          }
 
           if (requestedCategories.length > 0) {
-            emit('CSV_LOG', { text: `⏳ Validando ${requestedCategories.length} grupos/categorias antes de inserir os produtos...` });
+            // v6.54.0 — mostra preview: quais categorias existem e quais serão criadas
+            const existentes = requestedCategories.filter(c => categoryMap.has(normalizeCategoryName(c)));
+            const paraCrear = requestedCategories.filter(c => !categoryMap.has(normalizeCategoryName(c)));
+            emit('CSV_LOG', {
+              text: `⏳ Validando ${requestedCategories.length} grupos: ` +
+                `${existentes.length} já existem (${existentes.join(', ') || '-'}), ` +
+                `${paraCrear.length} serão criados (${paraCrear.join(', ') || '-'})...`
+            });
 
             for (const categoryName of requestedCategories) {
               const normalizedName = normalizeCategoryName(categoryName);

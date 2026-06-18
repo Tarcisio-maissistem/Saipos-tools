@@ -308,13 +308,11 @@ $('bReport').addEventListener('click', async () => {
   const filteredSales = getSalesForCurrentFilters(allSales);
   if (filteredSales.length === 0) return;
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) return;
-
-  // Extrai nome da loja do Saipos (só executa em tab do Saipos)
+  // v6.54.1 — tab só serve para nome da loja (opcional); não bloqueia abertura do relatório
   let storeName = 'Loja Saipos';
-  if (tab.url && tab.url.includes('conta.saipos.com')) {
-    try {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && tab.url && tab.url.includes('conta.saipos.com')) {
       const storeResult = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         func: () => {
@@ -328,8 +326,8 @@ $('bReport').addEventListener('click', async () => {
         }
       });
       if (storeResult && storeResult[0] && storeResult[0].result) storeName = storeResult[0].result;
-    } catch (_) {}
-  }
+    }
+  } catch (_) {}
 
   // Salva dados no storage para a página de relatório
   await chrome.storage.local.set({
@@ -338,11 +336,11 @@ $('bReport').addEventListener('click', async () => {
       storeName: storeName,
       dateRange: allDateRange
     },
-    saiposReportTimeFrom: $('pTimeFrom').value || '',
-    saiposReportTimeTo: $('pTimeTo').value || ''
+    saiposReportTimeFrom: $('pTimeFrom') ? $('pTimeFrom').value || '' : '',
+    saiposReportTimeTo: $('pTimeTo') ? $('pTimeTo').value || '' : ''
   });
 
-  // Abre a página de relatório (CSP-compliant)
+  // Abre a página de relatório
   chrome.tabs.create({ url: chrome.runtime.getURL('pages/report.html') });
 });
 
